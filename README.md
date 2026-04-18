@@ -1,4 +1,5 @@
-# Pulsar
+# Pulsar<img width="125" height="125" alt="Pulsar" src="https://github.com/user-attachments/assets/10218e63-c634-44cf-80ee-11190953ac2f" />
+
 
 Welcome to the first release of Pulsar.
 
