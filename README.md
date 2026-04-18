@@ -7,6 +7,7 @@ Pulsar is a Windows app for downloading video and audio from many supported site
 Spotify is not yet supported but I have plans to add it in the future.
 
 ## What You Can Do
+<img width="920" height="700" alt="image" src="https://github.com/user-attachments/assets/84e2422f-283e-4161-8f6b-fe0fe2f70985" />
 
 - Download video as MP4
 - Download audio as MP3, M4A, Opus, or WAV
