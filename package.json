@@ -1,0 +1,84 @@
+{
+  "name": "pulsar",
+  "version": "1.0.0",
+  "description": "Multi-service video & music downloader",
+  "author": "Admin",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite dev",
+    "prepack": "npm run build",
+    "pack": "electron-builder --dir",
+    "predist": "npm run build",
+    "dist": "electron-builder",
+    "prepublish-latest": "npm run build",
+    "publish-latest": "electron-builder --publish always",
+    "prepublish-beta": "npm run build",
+    "publish-beta": "set EP_PRE_RELEASE=true&& electron-builder --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3",
+    "ffbinaries": "^1.1.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.2",
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^2.3.0",
+    "rcedit": "^5.0.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  },
+  "build": {
+    "appId": "com.pulsar.downloader",
+    "productName": "Pulsar",
+    "npmRebuild": false,
+    "afterPack": "./afterPack.js",
+    "directories": {
+      "output": "release"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "BigBoss9324",
+        "repo": "Pulsar",
+        "releaseType": "release"
+      }
+    ],
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "out/main/index.js"
+    },
+    "extraResources": [
+      {
+        "from": "build/Pulsar.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "win": {
+      "icon": "build/Pulsar.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

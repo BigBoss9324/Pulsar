@@ -1,0 +1,21 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.inlineField {
+  display: flex;
+  gap: 8px;
+}
+
+.inlineField :global(.input) {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 560px) {
+  .inlineField {
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,93 @@
+export interface Format {
+  id: string
+  label: string
+  type: 'video' | 'audio'
+  quality?: string
+  audioFormat?: string
+  selector?: string
+}
+
+export interface FormatOpts {
+  type: 'video' | 'audio'
+  quality?: string
+  audioFormat?: string
+  selector?: string
+}
+
+export interface VideoInfo {
+  title: string
+  thumbnail: string
+  duration: string
+  uploader: string
+  formats: Format[]
+}
+
+export interface PlaylistItem {
+  id: string
+  title: string
+  url: string
+  thumbnail: string
+  duration: string
+  index: number
+}
+
+export interface QueueItem {
+  id: string
+  url: string
+  title: string
+  thumbnail: string
+  duration: string
+  format: FormatOpts
+  formatLabel: string
+  outputDir: string
+  filename: string
+  status: 'pending' | 'downloading' | 'done' | 'error'
+  progress: number
+  speed: string
+  error?: string
+  downloader?: 'ytdlp'
+  outputPath?: string
+  fileSize?: number
+}
+
+export interface HistoryItem {
+  id: string
+  url: string
+  title: string
+  thumbnail: string
+  duration: string
+  format: FormatOpts
+  formatLabel: string
+  outputDir: string
+  outputPath?: string
+  fileSize?: number
+  completedAt: string
+}
+
+export interface GithubRelease {
+  tag_name: string
+  name: string
+  body?: string
+  prerelease: boolean
+  published_at: string
+  assets: Array<{ name: string; browser_download_url: string; size: number }>
+}
+
+export interface AppUpdateInfo {
+  version: string
+  releaseName?: string
+  releaseNotes?: string
+  releaseDate?: string
+  prerelease?: boolean
+}
+
+export type AppStatus = { type: 'info' | 'ready' | 'error'; message: string }
+export interface AppSettings {
+  defaultOutputDir: string
+  defaultFormatId: string
+  autoCheckUpdates: boolean
+  autoOpenFolder: boolean
+  allowPrerelease: boolean
+  maxHistoryItems: number
+  enableDevMode: boolean
+}
