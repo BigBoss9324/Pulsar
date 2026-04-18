@@ -19,6 +19,7 @@ let LOG_PATH: string
 
 let mainWindow: BrowserWindow
 let activeProc: ChildProcess | null = null
+let activeDownloadId: string | null = null
 let setupReady = false
 let updateInstallScheduled = false
 let updateDownloadRequested = false
@@ -306,6 +307,88 @@ function normalizeYtdlpError(stderr: string, code: number | null): string {
   return errorLine || `yt-dlp exited with code ${code ?? 'unknown'}`
 }
 
+function stripYtdlpPrefix(message: string): string {
+  return message
+    .replace(/^ERROR:\s*/i, '')
+    .replace(/^WARNING:\s*/i, '')
+    .trim()
+}
+
+function isRetryableDownloadError(message: string): boolean {
+  const normalized = message.toLowerCase()
+  return [
+    'http error 429',
+    'http error 5',
+    'timed out',
+    'timeout',
+    'temporarily unavailable',
+    'connection reset',
+    'connection refused',
+    'network is unreachable',
+    'unable to download webpage',
+    'unable to download api page',
+    'remote end closed connection',
+    'certificate verify failed',
+  ].some((token) => normalized.includes(token))
+}
+
+function improveDownloadErrorMessage(message: string): string {
+  const cleaned = stripYtdlpPrefix(message)
+  const normalized = cleaned.toLowerCase()
+
+  if (normalized.includes('requested format is not available')) {
+    return 'That format is no longer available for this item. Fetch the link again and choose another format.'
+  }
+
+  if (normalized.includes('sign in to confirm your age')) {
+    return 'This item is age-restricted and cannot be downloaded without authentication.'
+  }
+
+  if (normalized.includes('private video') || normalized.includes('this video is private')) {
+    return 'This item is private and could not be downloaded.'
+  }
+
+  if (normalized.includes('video unavailable')) {
+    return 'This item is unavailable or has been removed.'
+  }
+
+  if (normalized.includes('unsupported url')) {
+    return 'This link is not supported by the current downloader.'
+  }
+
+  if (normalized.includes('unable to download webpage') || normalized.includes('temporarily unavailable')) {
+    return 'The site did not respond properly. Retrying usually helps for this kind of failure.'
+  }
+
+  if (normalized.includes('http error 429')) {
+    return 'The site is rate-limiting requests right now. Waiting a moment and retrying usually helps.'
+  }
+
+  if (normalized.includes('timed out') || normalized.includes('timeout')) {
+    return 'The download timed out before it finished. Check the connection and try again.'
+  }
+
+  return cleaned || 'The download failed unexpectedly.'
+}
+
+function getProgressPayload(line: string): DownloadProgressEvent | null {
+  const trimmed = line.trim()
+  if (!trimmed.startsWith('[download]')) return null
+
+  const percentMatch = trimmed.match(/(\d+(?:\.\d+)?)%/)
+  const totalMatch = trimmed.match(/of\s+(?:~\s+)?(.+?)(?:\s+at\s+|\s+ETA\s+|$)/i)
+  const speedMatch = trimmed.match(/at\s+(.+?)(?:\s+ETA\s+|$)/i)
+  const etaMatch = trimmed.match(/ETA\s+(.+)$/i)
+  return {
+    percent: percentMatch ? parseFloat(percentMatch[1]) : 0,
+    speed: speedMatch?.[1]?.trim() || '',
+    eta: etaMatch?.[1]?.trim() || '',
+    total: totalMatch?.[1]?.trim() || '',
+    transferred: '',
+    raw: trimmed,
+  }
+}
+
 function normalizeUpdateError(err: Error): string {
   const message = (err.message || 'Unknown update error').trim()
   const compactMessage = message.replace(/\s+/g, ' ')
@@ -337,6 +420,12 @@ function defaultAppSettings(): AppSettings {
   return {
     defaultOutputDir: getDefaultOutputDir(),
     defaultFormatId: 'preset-best',
+    filenameTemplate: '%(title)s',
+    subtitleMode: 'off',
+    subtitleLanguages: 'en.*',
+    duplicateStrategy: 'skip',
+    embedMetadata: true,
+    embedThumbnail: true,
     autoCheckUpdates: true,
     allowPrerelease: false,
     autoOpenFolder: false,
@@ -369,6 +458,8 @@ function saveSettings(next: AppSettings): AppSettings {
     ...defaults,
     ...next,
     defaultOutputDir: next.defaultOutputDir || defaults.defaultOutputDir,
+    filenameTemplate: (next.filenameTemplate || defaults.filenameTemplate).trim() || defaults.filenameTemplate,
+    subtitleLanguages: (next.subtitleLanguages || defaults.subtitleLanguages).trim() || defaults.subtitleLanguages,
     maxHistoryItems: Math.max(10, Math.min(5000, Math.floor(next.maxHistoryItems || defaults.maxHistoryItems))),
   }
   fs.writeFileSync(SETTINGS_PATH, JSON.stringify(currentSettings, null, 2))
@@ -645,18 +736,28 @@ ipcMain.handle('download-app-update', async () => {
 })
 
 ipcMain.handle('download', (_e, req: DownloadRequest) => {
-  if (activeProc) return Promise.reject(new Error('A download is already in progress'))
-  return downloadWithYtdlp(req)
+  if (activeProc) {
+    return Promise.resolve({
+      success: false,
+      outputDir: req.outputDir,
+      error: 'A download is already in progress.',
+      retryable: false,
+      cancelled: false,
+      resumable: true,
+    } satisfies DownloadResult)
+  }
+
+  return downloadWithYtdlp(req).catch((failure: DownloadResult) => failure)
 })
 
-function downloadWithYtdlp({ url, format, outputDir, filename }: DownloadRequest) {
-  const safe = (filename || '%(title)s').replace(/[<>:"/\\|?*]/g, '_')
-  const template = path.join(outputDir, safe + '.%(ext)s')
-  const args = buildYtdlpArgs(url, format, template)
+function downloadWithYtdlp({ id, url, format, outputDir, filename, downloadPrefs }: DownloadRequest) {
+  const template = buildOutputTemplate(outputDir, filename, downloadPrefs)
+  const args = buildYtdlpArgs(url, format, template, downloadPrefs)
 
   return new Promise<DownloadResult>((resolve, reject) => {
     const proc = spawn(YTDLP_PATH, [...baseYtdlpArgs(), ...args])
     activeProc = proc
+    activeDownloadId = id
     let stderrBuf = ''
     let outputPath = ''
 
@@ -664,9 +765,9 @@ function downloadWithYtdlp({ url, format, outputDir, filename }: DownloadRequest
       for (const line of chunk.toString().split('\n')) {
         const trimmed = line.trim()
         if (!trimmed) continue
-        const m = line.match(/\[download\]\s+(\d+\.?\d*)%.*?(\d+\.?\d*\s*\w+\/s)/)
-        if (m) {
-          mainWindow.webContents.send('download-progress', { percent: parseFloat(m[1]), speed: m[2] })
+        const progress = getProgressPayload(line)
+        if (progress && activeDownloadId) {
+          mainWindow.webContents.send('download-progress', { id: activeDownloadId, ...progress })
           continue
         }
         if (!trimmed.startsWith('[')) outputPath = trimmed
@@ -676,24 +777,51 @@ function downloadWithYtdlp({ url, format, outputDir, filename }: DownloadRequest
 
     proc.on('close', (code) => {
       activeProc = null
+      activeDownloadId = null
       if (code === 0) {
         const fileSize = outputPath && fs.existsSync(outputPath) ? fs.statSync(outputPath).size : undefined
         resolve({ success: true, outputDir, outputPath: outputPath || undefined, fileSize })
         return
       }
-      const msg = stderrBuf.trim().split('\n').pop() || `yt-dlp exited with code ${code}`
-      logError('Download failed', { code, url, outputDir, stderr: stderrBuf.trim() || msg })
-      reject(new Error(msg))
+      const normalizedError = normalizeYtdlpError(stderrBuf, code)
+      const improvedMessage = improveDownloadErrorMessage(normalizedError)
+      const cancelled = code === null || code === -1 || /terminated|killed|interrupted|cancel/i.test(normalizedError)
+      const failure: DownloadResult = {
+        success: false,
+        outputDir,
+        error: cancelled ? 'Cancelled' : improvedMessage,
+        retryable: !cancelled && isRetryableDownloadError(normalizedError),
+        cancelled,
+        resumable: !cancelled,
+        details: stripYtdlpPrefix(normalizedError),
+      }
+      logError('Download failed', { code, url, outputDir, stderr: stderrBuf.trim() || normalizedError, failure })
+      reject(failure)
     })
     proc.on('error', (e) => {
       activeProc = null
+      activeDownloadId = null
       logError('Download process error', e)
-      reject(e)
+      reject({
+        success: false,
+        outputDir,
+        error: 'Unable to start the download process.',
+        retryable: true,
+        cancelled: false,
+        resumable: true,
+        details: serializeError(e),
+      } satisfies DownloadResult)
     })
   })
 }
 
-ipcMain.handle('cancel-download', () => { if (activeProc) { activeProc.kill(); activeProc = null } })
+ipcMain.handle('cancel-download', (_e, id?: string) => {
+  if (activeProc && (!id || id === activeDownloadId)) {
+    activeProc.kill()
+    activeProc = null
+    activeDownloadId = null
+  }
+})
 ipcMain.handle('open-folder', (_e, p: string) => shell.openPath(p))
 
 ipcMain.handle('get-ytdlp-version', async () => {
@@ -731,19 +859,28 @@ ipcMain.handle('save-history-item', (_e, item: HistoryItem) => {
   fs.writeFileSync(HISTORY_PATH, JSON.stringify(h.slice(0, currentSettings.maxHistoryItems), null, 2))
 })
 
-function buildYtdlpArgs(url: string, format: FormatOpts, template: string): string[] {
+function buildYtdlpArgs(url: string, format: FormatOpts, template: string, downloadPrefs: DownloadPreferences): string[] {
   const args = [
     url,
     '-o',
     template,
     '--newline',
+    '--continue',
+    '--part',
     '--no-warnings',
     '--no-playlist',
     '--print',
     'after_move:filepath',
-    '--embed-thumbnail',
-    '--add-metadata',
   ]
+  if (downloadPrefs.embedThumbnail) args.push('--embed-thumbnail')
+  if (downloadPrefs.embedMetadata) args.push('--add-metadata')
+  if (downloadPrefs.duplicateStrategy === 'skip') args.push('--no-overwrites')
+  if (downloadPrefs.duplicateStrategy === 'overwrite') args.push('--force-overwrites')
+  if (downloadPrefs.subtitleMode !== 'off') {
+    args.push('--write-subs', '--write-auto-subs')
+    if (downloadPrefs.subtitleLanguages.trim()) args.push('--sub-langs', downloadPrefs.subtitleLanguages.trim())
+    if (downloadPrefs.subtitleMode === 'embed') args.push('--embed-subs')
+  }
   if (format.type === 'audio') {
     args.push('-x', '--audio-format', format.audioFormat ?? 'mp3', '--audio-quality', '0')
   } else {
@@ -842,14 +979,103 @@ function formatDuration(s: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`
 }
 
+function sanitizeOutputTemplateSegment(value: string): string {
+  return value
+    .replace(/[<>:"/\\|?*]/g, '_')
+    .replace(/\.\./g, '_')
+    .trim()
+}
+
+function buildOutputTemplate(outputDir: string, filename: string, downloadPrefs: DownloadPreferences): string {
+  const manualName = sanitizeOutputTemplateSegment(filename)
+  const templateBase = manualName || sanitizeOutputTemplateSegment(downloadPrefs.filenameTemplate || '%(title)s')
+  const safeBase = templateBase || '%(title)s'
+  return path.join(outputDir, `${safeBase}.%(ext)s`)
+}
+
 interface FormatOpts { type: 'video' | 'audio'; quality?: string; audioFormat?: string; selector?: string }
+interface DownloadPreferences {
+  filenameTemplate: string
+  subtitleMode: 'off' | 'separate' | 'embed'
+  subtitleLanguages: string
+  duplicateStrategy: 'skip' | 'allow' | 'overwrite'
+  embedMetadata: boolean
+  embedThumbnail: boolean
+}
 interface Format { id: string; label: string; type: 'video' | 'audio'; quality?: string; audioFormat?: string; selector?: string }
-interface DownloadRequest { url: string; format: FormatOpts; outputDir: string; filename: string; downloader?: 'ytdlp' }
-interface DownloadResult { success: boolean; outputDir: string; outputPath?: string; fileSize?: number }
+interface DownloadRequest {
+  id: string
+  url: string
+  format: FormatOpts
+  outputDir: string
+  filename: string
+  downloadPrefs: DownloadPreferences
+  downloader?: 'ytdlp'
+}
+interface DownloadResult {
+  success: boolean
+  outputDir: string
+  outputPath?: string
+  fileSize?: number
+  error?: string
+  details?: string
+  retryable?: boolean
+  cancelled?: boolean
+  resumable?: boolean
+}
+interface DownloadProgressEvent {
+  percent: number
+  speed: string
+  eta: string
+  total: string
+  transferred: string
+  raw: string
+}
 interface PlaylistItem { id: string; title: string; url: string; thumbnail: string; duration: string; index: number }
 interface HistoryItem { id: string; url: string; title: string; thumbnail: string; duration: string; format: FormatOpts; formatLabel: string; outputDir: string; outputPath?: string; fileSize?: number; completedAt: string }
-interface AppSettings { defaultOutputDir: string; defaultFormatId: string; autoCheckUpdates: boolean; autoOpenFolder: boolean; allowPrerelease: boolean; maxHistoryItems: number; enableDevMode: boolean }
-interface PersistedQueueItem { id: string; url: string; title: string; thumbnail: string; duration: string; format: FormatOpts; formatLabel: string; outputDir: string; filename: string; status: 'pending' | 'downloading' | 'done' | 'error'; progress: number; speed: string; error?: string; downloader?: 'ytdlp'; outputPath?: string; fileSize?: number }
+interface AppSettings {
+  defaultOutputDir: string
+  defaultFormatId: string
+  filenameTemplate: string
+  subtitleMode: 'off' | 'separate' | 'embed'
+  subtitleLanguages: string
+  duplicateStrategy: 'skip' | 'allow' | 'overwrite'
+  embedMetadata: boolean
+  embedThumbnail: boolean
+  autoCheckUpdates: boolean
+  autoOpenFolder: boolean
+  allowPrerelease: boolean
+  maxHistoryItems: number
+  enableDevMode: boolean
+}
+interface PersistedQueueItem {
+  id: string
+  url: string
+  title: string
+  thumbnail: string
+  duration: string
+  format: FormatOpts
+  formatLabel: string
+  outputDir: string
+  filename: string
+  status: 'pending' | 'downloading' | 'done' | 'error'
+  progress: number
+  speed: string
+  eta?: string
+  total?: string
+  transferred?: string
+  error?: string
+  errorDetails?: string
+  attempts?: number
+  maxAttempts?: number
+  lastStartedAt?: string
+  lastFinishedAt?: string
+  resumable?: boolean
+  downloader?: 'ytdlp'
+  downloadPrefs?: DownloadPreferences
+  outputPath?: string
+  fileSize?: number
+}
 
 ipcMain.handle('get-releases', () => {
   return fetchGithubReleases()

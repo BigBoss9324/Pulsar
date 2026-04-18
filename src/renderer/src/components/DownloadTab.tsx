@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { VideoInfo, QueueItem, FormatOpts, PlaylistItem, HistoryItem, AppSettings } from '../types'
+import type { VideoInfo, QueueItem, FormatOpts, PlaylistItem, HistoryItem, AppSettings, DownloadPreferences } from '../types'
 import { detectUrl } from '../utils/urlDetect'
 import PlaylistPicker from './PlaylistPicker'
 import PathField from './PathField'
 import Thumb from './Thumb'
 import styles from './DownloadTab.module.css'
+
+const DEFAULT_MAX_ATTEMPTS = 3
+const RETRY_DELAY_MS = 2500
 
 interface Props {
   appReady: boolean
@@ -13,6 +16,11 @@ interface Props {
   showToast: (msg: string, type: string) => void
   onDownloadComplete: () => void
 }
+
+type QueueDraft = Pick<
+  QueueItem,
+  'url' | 'title' | 'thumbnail' | 'duration' | 'format' | 'formatLabel' | 'outputDir' | 'filename' | 'downloader' | 'downloadPrefs'
+>
 
 function nanoid() { return Math.random().toString(36).slice(2) + Date.now().toString(36) }
 
@@ -45,6 +53,102 @@ function fileNameFromPath(filePath?: string) {
   return parts[parts.length - 1] || ''
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function normalizeDownloadFailure(err: unknown) {
+  if (err && typeof err === 'object') {
+    const failure = err as {
+      error?: string
+      message?: string
+      details?: string
+      retryable?: boolean
+      cancelled?: boolean
+      resumable?: boolean
+    }
+
+    return {
+      message: cleanError(failure.error || failure.message || 'Download failed'),
+      details: typeof failure.details === 'string' ? failure.details : '',
+      retryable: Boolean(failure.retryable),
+      cancelled: Boolean(failure.cancelled),
+      resumable: failure.resumable !== false,
+    }
+  }
+
+  if (err instanceof Error) {
+    return {
+      message: cleanError(err.message),
+      details: '',
+      retryable: false,
+      cancelled: false,
+      resumable: true,
+    }
+  }
+
+  return {
+    message: 'Download failed',
+    details: '',
+    retryable: false,
+    cancelled: false,
+    resumable: true,
+  }
+}
+
+function buildQueueItem(item: QueueDraft): QueueItem {
+  return {
+    ...item,
+    id: nanoid(),
+    status: 'pending',
+    progress: 0,
+    speed: '',
+    eta: '',
+    total: '',
+    transferred: '',
+    attempts: 0,
+    maxAttempts: DEFAULT_MAX_ATTEMPTS,
+    resumable: true,
+  }
+}
+
+function buildDownloadPrefs(settings: AppSettings): DownloadPreferences {
+  return {
+    filenameTemplate: settings.filenameTemplate,
+    subtitleMode: settings.subtitleMode,
+    subtitleLanguages: settings.subtitleLanguages,
+    duplicateStrategy: settings.duplicateStrategy,
+    embedMetadata: settings.embedMetadata,
+    embedThumbnail: settings.embedThumbnail,
+  }
+}
+
+function restoreQueueItem(item: QueueItem): QueueItem {
+  const recovered = item.status === 'downloading'
+
+  return {
+    ...item,
+    status: recovered ? 'pending' : item.status,
+    progress: item.status === 'done' ? item.progress : 0,
+    speed: '',
+    eta: '',
+    total: item.total ?? '',
+    transferred: item.status === 'done' ? item.transferred ?? item.total ?? '' : '',
+    attempts: item.attempts ?? 0,
+    maxAttempts: item.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
+    resumable: item.resumable !== false,
+    downloadPrefs: item.downloadPrefs ?? {
+      filenameTemplate: '%(title)s',
+      subtitleMode: 'off',
+      subtitleLanguages: 'en.*',
+      duplicateStrategy: 'skip',
+      embedMetadata: true,
+      embedThumbnail: true,
+    },
+    error: recovered ? 'Recovered from previous session. Ready to resume.' : item.error,
+  }
+}
+
 export default function DownloadTab({ appReady, redownloadRequest, settings, showToast, onDownloadComplete }: Props) {
   const [url, setUrl] = useState('')
   const [fetching, setFetching] = useState(false)
@@ -71,10 +175,12 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
   const showPlaylistBanner = urlInfo?.canBePlaylist && url.includes('list=') && !videoInfo
 
   useEffect(() => {
-    return window.api.onProgress(({ percent, speed }) => {
+    return window.api.onProgress(({ id, percent, speed, eta, total, transferred }) => {
       setQueue((q) => {
         const next = q.map((item) =>
-          item.status === 'downloading' ? { ...item, progress: Math.max(0, percent), speed } : item,
+          item.id === id && item.status === 'downloading'
+            ? { ...item, progress: Math.max(0, percent), speed, eta, total, transferred }
+            : item,
         )
         queueRef.current = next
         return next
@@ -88,19 +194,22 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
 
   useEffect(() => {
     window.api.getQueueState().then((items) => {
-      const restored = items.map((item) => ({
-        ...item,
-        status: item.status === 'downloading' ? 'pending' as const : item.status,
-        progress: item.status === 'done' ? item.progress : 0,
-        speed: '',
-      }))
+      const restored = items.map((item) => restoreQueueItem(item))
       queueRef.current = restored
       setQueue(restored)
       queueLoadedRef.current = true
+
+      const recoveredCount = items.filter((item) => item.status === 'downloading').length
+      const pendingCount = restored.filter((item) => item.status === 'pending').length
+      if (recoveredCount > 0) {
+        showToast(`Recovered ${recoveredCount} in-progress download${recoveredCount !== 1 ? 's' : ''}`, 'success')
+      } else if (pendingCount > 0) {
+        showToast(`Restored ${pendingCount} queued item${pendingCount !== 1 ? 's' : ''}`, 'success')
+      }
     }).catch(() => {
       queueLoadedRef.current = true
     })
-  }, [])
+  }, [showToast])
 
   useEffect(() => {
     window.api.getHistory().then(setHistoryItems).catch(() => {})
@@ -127,30 +236,44 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
     if (!next) return
 
     processingRef.current = true
-    updateQueue((q) => q.map((i) => i.id === next.id ? { ...i, status: 'downloading', progress: 0, speed: '' } : i))
+    updateQueue((q) => q.map((i) => i.id === next.id ? {
+      ...i,
+      status: 'downloading',
+      progress: 0,
+      speed: '',
+      eta: '',
+      transferred: '',
+      error: undefined,
+      errorDetails: undefined,
+      attempts: (i.attempts ?? 0) + 1,
+      lastStartedAt: new Date().toISOString(),
+    } : i))
 
     try {
       const result = await window.api.download({
+        id: next.id,
         url: next.url,
         format: next.format,
         outputDir: next.outputDir,
         filename: next.filename,
+        downloadPrefs: next.downloadPrefs ?? buildDownloadPrefs(settings),
         downloader: next.downloader,
       })
+      if (!result.success) throw result
+
       updateQueue((q) => q.map((i) => i.id === next.id ? {
         ...i,
         status: 'done',
         progress: 100,
+        speed: '',
+        eta: '',
+        transferred: i.total || i.transferred,
         outputPath: result.outputPath,
         fileSize: result.fileSize,
+        lastFinishedAt: new Date().toISOString(),
       } : i))
-      await window.api.saveHistoryItem({
-        id: next.id, url: next.url, title: next.title,
-        thumbnail: next.thumbnail, duration: next.duration,
-        format: next.format, formatLabel: next.formatLabel,
-        outputDir: next.outputDir, outputPath: result.outputPath, fileSize: result.fileSize, completedAt: new Date().toISOString(),
-      })
-      setHistoryItems((items) => [{
+
+      const historyItem: HistoryItem = {
         id: next.id,
         url: next.url,
         title: next.title,
@@ -162,24 +285,48 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
         outputPath: result.outputPath,
         fileSize: result.fileSize,
         completedAt: new Date().toISOString(),
-      }, ...items])
+      }
+
+      await window.api.saveHistoryItem(historyItem)
+      setHistoryItems((items) => [historyItem, ...items])
       if (settings.autoOpenFolder) window.api.openFolder(next.outputDir).catch(() => {})
       onDownloadComplete()
     } catch (err) {
-      const msg = cleanError((err as Error).message)
-      const cancelled = msg.toLowerCase().includes('killed') || msg.toLowerCase().includes('cancel')
-      updateQueue((q) => q.map((i) => i.id === next.id ? { ...i, status: 'error', error: cancelled ? 'Cancelled' : msg } : i))
+      const failure = normalizeDownloadFailure(err)
+      const currentItem = queueRef.current.find((item) => item.id === next.id)
+      const attempts = currentItem?.attempts ?? (next.attempts ?? 0) + 1
+      const maxAttempts = currentItem?.maxAttempts ?? next.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
+      const shouldRetry = failure.retryable && !failure.cancelled && attempts < maxAttempts
+
+      updateQueue((q) => q.map((i) => i.id === next.id ? {
+        ...i,
+        status: shouldRetry ? 'pending' : 'error',
+        progress: 0,
+        speed: '',
+        eta: '',
+        error: shouldRetry
+          ? `${failure.message} Retrying automatically (${attempts}/${maxAttempts})...`
+          : failure.message,
+        errorDetails: failure.details,
+        resumable: failure.resumable,
+        lastFinishedAt: new Date().toISOString(),
+      } : i))
+
+      if (shouldRetry) {
+        showToast(`Retrying "${next.title}"`, 'info')
+        await wait(RETRY_DELAY_MS)
+      }
     } finally {
       processingRef.current = false
       processQueue()
     }
-  }, [onDownloadComplete, queuePaused, settings.autoOpenFolder, updateQueue])
+  }, [onDownloadComplete, queuePaused, settings.autoOpenFolder, showToast, updateQueue])
 
   useEffect(() => {
-    if (!queuePaused) processQueue()
-  }, [processQueue, queuePaused])
+    if (!queuePaused && appReady) processQueue()
+  }, [appReady, processQueue, queuePaused])
 
-  const addToQueue = useCallback((items: Omit<QueueItem, 'id' | 'status' | 'progress' | 'speed'>[]) => {
+  const addToQueue = useCallback((items: QueueDraft[]) => {
     const alreadyDownloaded = items.filter((item) =>
       historyItems.some((historyItem) =>
         historyItem.url === item.url &&
@@ -188,7 +335,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
       ),
     )
 
-    const uniqueItems = items.filter((item) =>
+    const queuedDuplicates = items.filter((item) =>
       !queueRef.current.some((queued) =>
         queued.url === item.url &&
         queued.outputDir === item.outputDir &&
@@ -197,25 +344,40 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
       ),
     )
 
+    let uniqueItems = queuedDuplicates
+    if (settings.duplicateStrategy === 'skip') {
+      uniqueItems = queuedDuplicates.filter((item) =>
+        !historyItems.some((historyItem) =>
+          historyItem.url === item.url &&
+          historyItem.outputDir === item.outputDir &&
+          historyItem.formatLabel === item.formatLabel,
+        ),
+      )
+    }
+
     if (uniqueItems.length === 0) {
-      showToast('That item is already in the queue', 'error')
+      showToast(settings.duplicateStrategy === 'skip' ? 'Skipped duplicate items based on your duplicate rule' : 'That item is already in the queue', 'error')
       return
     }
 
-    if (alreadyDownloaded.length > 0) {
+    if (alreadyDownloaded.length > 0 && settings.duplicateStrategy !== 'skip') {
       const count = alreadyDownloaded.length
       showToast(`Already downloaded before: ${count} item${count !== 1 ? 's' : ''}`, 'success')
     }
 
-    const newItems: QueueItem[] = uniqueItems.map((item) => ({ ...item, id: nanoid(), status: 'pending', progress: 0, speed: '' }))
+    const newItems: QueueItem[] = uniqueItems.map((item) => buildQueueItem(item))
     queueRef.current = [...queueRef.current, ...newItems]
     setQueue([...queueRef.current])
-    if (uniqueItems.length < items.length) {
-      const skipped = items.length - uniqueItems.length
+    if (queuedDuplicates.length < items.length) {
+      const skipped = items.length - queuedDuplicates.length
       showToast(`Skipped ${skipped} duplicate item${skipped !== 1 ? 's' : ''}`, 'error')
     }
+    if (settings.duplicateStrategy === 'skip' && uniqueItems.length < queuedDuplicates.length) {
+      const skippedByHistory = queuedDuplicates.length - uniqueItems.length
+      showToast(`Skipped ${skippedByHistory} previously downloaded item${skippedByHistory !== 1 ? 's' : ''}`, 'info')
+    }
     processQueue()
-  }, [processQueue, showToast])
+  }, [historyItems, processQueue, settings.duplicateStrategy, showToast])
 
   useEffect(() => {
     if (!redownloadRequest || redownloadRequest.nonce === lastRedownloadNonceRef.current) return
@@ -232,9 +394,10 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
       formatLabel: item.formatLabel,
       outputDir: item.outputDir,
       filename: '',
+      downloadPrefs: buildDownloadPrefs(settings),
       downloader: 'ytdlp',
     }])
-  }, [addToQueue, redownloadRequest])
+  }, [addToQueue, redownloadRequest, settings])
 
   async function handleFetch() {
     setFetching(true)
@@ -282,11 +445,20 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
       : { type: 'video', quality: fmt.quality, selector: fmt.selector }
 
     addToQueue([{
-      url: url.trim(), title: videoInfo.title, thumbnail: videoInfo.thumbnail,
-      duration: videoInfo.duration, format: fmtOpts, formatLabel: fmt.label,
-      outputDir, filename, downloader: 'ytdlp',
+      url: url.trim(),
+      title: videoInfo.title,
+      thumbnail: videoInfo.thumbnail,
+      duration: videoInfo.duration,
+      format: fmtOpts,
+      formatLabel: fmt.label,
+      outputDir,
+      filename,
+      downloadPrefs: buildDownloadPrefs(settings),
+      downloader: 'ytdlp',
     }])
-    setVideoInfo(null); setUrl(''); setFilename('')
+    setVideoInfo(null)
+    setUrl('')
+    setFilename('')
     showToast('Added to queue', 'success')
   }
 
@@ -303,18 +475,40 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
       : { type: 'video', quality: 'quality' in fmt ? fmt.quality : undefined, selector: 'selector' in fmt ? fmt.selector : undefined }
 
     addToQueue(items.map(({ item, outputDir: itemOutputDir }) => ({
-      url: item.url, title: item.title, thumbnail: item.thumbnail, duration: item.duration,
-      format: fmtOpts, formatLabel: fmt.label, outputDir: itemOutputDir, filename: '', downloader: 'ytdlp' as const,
+      url: item.url,
+      title: item.title,
+      thumbnail: item.thumbnail,
+      duration: item.duration,
+      format: fmtOpts,
+      formatLabel: fmt.label,
+      outputDir: itemOutputDir,
+      filename: '',
+      downloadPrefs: buildDownloadPrefs(settings),
+      downloader: 'ytdlp' as const,
     })))
     setShowPlaylistPicker(false)
     showToast(`Added ${items.length} video${items.length !== 1 ? 's' : ''} to queue`, 'success')
   }
 
   function removeQueueItem(id: string) { updateQueue((q) => q.filter((i) => i.id !== id)) }
-  function clearDone() { updateQueue((q) => q.filter((i) => i.status === 'pending' || i.status === 'downloading')) }
+  function clearCompleted() { updateQueue((q) => q.filter((i) => i.status !== 'done')) }
+  function retryAllFailed() {
+    updateQueue((q) => q.map((item) => item.status === 'error' ? {
+      ...item,
+      status: 'pending',
+      progress: 0,
+      speed: '',
+      eta: '',
+      transferred: '',
+      error: undefined,
+      errorDetails: undefined,
+    } : item))
+    processQueue()
+  }
 
   const canFetch = appReady && isValidUrl(url) && !fetching
-  const hasDoneOrError = queue.some((i) => i.status === 'done' || i.status === 'error')
+  const hasCompleted = queue.some((i) => i.status === 'done')
+  const hasFailed = queue.some((i) => i.status === 'error')
   const hasActiveContent = !!videoInfo || queue.length > 0 || showPlaylistPicker
 
   return (
@@ -456,7 +650,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
             <div className="flex-1">
               <div className={styles.videoTitle}>{videoInfo.title}</div>
               <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
-                {[videoInfo.uploader, videoInfo.duration].filter(Boolean).join(' · ')}
+                {[videoInfo.uploader, videoInfo.duration].filter(Boolean).join(' • ')}
                 {urlInfo?.isMusic && <span className={styles.musicBadge}>{urlInfo.label}</span>}
               </div>
             </div>
@@ -494,7 +688,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
 
       {queue.length > 0 && (
         <div className={`card ${styles.queueSection}`}>
-          <div className="flex items-center gap-2" style={{ marginBottom: 12 }}>
+          <div className="flex items-center gap-2" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 600, fontSize: 13 }}>Queue</span>
             <span className="muted" style={{ fontSize: 12 }}>
               {queue.filter((i) => i.status === 'done').length}/{queue.length} done
@@ -509,9 +703,14 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
                 Remove pending
               </button>
             )}
-            {hasDoneOrError && (
-              <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={clearDone}>
-                Clear done
+            {hasFailed && (
+              <button className="btn btn-ghost btn-sm" onClick={retryAllFailed}>
+                Retry failed
+              </button>
+            )}
+            {hasCompleted && (
+              <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={clearCompleted}>
+                Clear completed
               </button>
             )}
           </div>
@@ -521,11 +720,20 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
                 key={item.id}
                 item={item}
                 onRemove={() => removeQueueItem(item.id)}
-                onCancel={() => window.api.cancelDownload()}
+                onCancel={() => window.api.cancelDownload(item.id)}
                 onOpenFolder={() => window.api.openFolder(item.outputDir)}
                 onReveal={() => item.outputPath ? window.api.revealItem(item.outputPath) : Promise.resolve()}
                 onRetry={() => {
-                  updateQueue((q) => q.map((i) => i.id === item.id ? { ...i, status: 'pending', error: undefined, progress: 0 } : i))
+                  updateQueue((q) => q.map((i) => i.id === item.id ? {
+                    ...i,
+                    status: 'pending',
+                    error: undefined,
+                    errorDetails: undefined,
+                    progress: 0,
+                    speed: '',
+                    eta: '',
+                    transferred: '',
+                  } : i))
                   processQueue()
                 }}
                 onMoveUp={() => updateQueue((q) => moveQueueItem(q, item.id, -1))}
@@ -566,6 +774,15 @@ function QueueRow({ item, onRemove, onCancel, onOpenFolder, onReveal, onRetry, o
     : styles.statusPending
 
   const indeterminate = item.status === 'downloading' && item.progress <= 0
+  const attemptText = item.attempts ? `Attempt ${item.attempts}${item.maxAttempts ? `/${item.maxAttempts}` : ''}` : ''
+  const transferSummary = [item.transferred, item.total ? `of ${item.total}` : '', item.eta ? `ETA ${item.eta}` : '']
+    .filter(Boolean)
+    .join(' • ')
+  const extraSummary = [
+    item.status === 'downloading' ? transferSummary : '',
+    item.status !== 'done' ? attemptText : '',
+    item.status === 'error' && item.resumable !== false ? 'Resume supported' : '',
+  ].filter(Boolean).join(' • ')
 
   return (
     <div className={styles.queueRow}>
@@ -574,14 +791,19 @@ function QueueRow({ item, onRemove, onCancel, onOpenFolder, onReveal, onRetry, o
         <div className={styles.queueTitle} title={item.title}>{item.title}</div>
         <div className="flex gap-2 items-center" style={{ marginTop: 3 }}>
           <span className={`${styles.statusDot} ${dotClass}`} />
-          <span className="muted" style={{ fontSize: 11 }}>
+          <span className="muted" style={{ fontSize: 11 }} title={item.errorDetails || undefined}>
             {item.status === 'downloading'
-              ? indeterminate ? item.speed || 'Downloading...' : `${Math.round(item.progress)}% · ${item.speed}`
+              ? indeterminate ? item.speed || 'Downloading...' : `${Math.round(item.progress)}% • ${item.speed || 'Working...'}`
               : item.status === 'error' ? item.error
-              : item.status === 'done' ? [fileNameFromPath(item.outputPath), formatBytes(item.fileSize)].filter(Boolean).join(' · ') || 'Done'
+              : item.status === 'done' ? [fileNameFromPath(item.outputPath), formatBytes(item.fileSize)].filter(Boolean).join(' • ') || 'Done'
               : item.formatLabel}
           </span>
         </div>
+        {extraSummary && (
+          <div className={styles.queueSubline} title={item.errorDetails || extraSummary}>
+            {extraSummary}
+          </div>
+        )}
         {item.status === 'downloading' && !indeterminate && (
           <div className={styles.miniProgressTrack}>
             <div className={styles.miniProgressFill} style={{ width: `${item.progress}%` }} />

@@ -12,6 +12,18 @@ const FORMAT_OPTIONS = [
   { id: 'audio-m4a', label: 'M4A (Audio only)' },
 ]
 
+const SUBTITLE_MODE_OPTIONS = [
+  { id: 'off', label: 'Off' },
+  { id: 'separate', label: 'Download subtitle files' },
+  { id: 'embed', label: 'Embed subtitles when possible' },
+]
+
+const DUPLICATE_OPTIONS = [
+  { id: 'skip', label: 'Skip previously downloaded items' },
+  { id: 'allow', label: 'Allow re-adding duplicates' },
+  { id: 'overwrite', label: 'Overwrite existing files when redownloading' },
+]
+
 interface Props {
   settings: AppSettings
   onClose: () => void
@@ -145,6 +157,8 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
     try {
       await onSave({
         ...draft,
+        filenameTemplate: draft.filenameTemplate.trim() || '%(title)s',
+        subtitleLanguages: draft.subtitleLanguages.trim() || 'en.*',
         maxHistoryItems: Math.max(10, Number(draft.maxHistoryItems) || 125),
       })
       onClose()
@@ -217,6 +231,79 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
               onChange={(e) => setDraft((prev) => ({ ...prev, maxHistoryItems: Number(e.target.value) }))}
             />
           </div>
+
+          <div className="flex-col gap-1">
+            <label className="label">Filename template</label>
+            <input
+              className="input"
+              type="text"
+              placeholder="%(title)s"
+              value={draft.filenameTemplate}
+              onChange={(e) => setDraft((prev) => ({ ...prev, filenameTemplate: e.target.value }))}
+            />
+            <span className="muted" style={{ fontSize: 12 }}>
+              Supports yt-dlp placeholders like <code>%(title)s</code>, <code>%(uploader)s</code>, and <code>%(upload_date)s</code>.
+            </span>
+          </div>
+
+          <div className="flex-col gap-1">
+            <label className="label">Subtitle handling</label>
+            <select
+              className="select"
+              value={draft.subtitleMode}
+              onChange={(e) => setDraft((prev) => ({ ...prev, subtitleMode: e.target.value as AppSettings['subtitleMode'] }))}
+            >
+              {SUBTITLE_MODE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {draft.subtitleMode !== 'off' && (
+            <div className="flex-col gap-1">
+              <label className="label">Subtitle languages</label>
+              <input
+                className="input"
+                type="text"
+                placeholder="en.*,en"
+                value={draft.subtitleLanguages}
+                onChange={(e) => setDraft((prev) => ({ ...prev, subtitleLanguages: e.target.value }))}
+              />
+              <span className="muted" style={{ fontSize: 12 }}>
+                Use yt-dlp language patterns like <code>en.*</code>, <code>en,es</code>, or <code>all</code>.
+              </span>
+            </div>
+          )}
+
+          <div className="flex-col gap-1">
+            <label className="label">Duplicate rule</label>
+            <select
+              className="select"
+              value={draft.duplicateStrategy}
+              onChange={(e) => setDraft((prev) => ({ ...prev, duplicateStrategy: e.target.value as AppSettings['duplicateStrategy'] }))}
+            >
+              {DUPLICATE_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+            <span className="muted" style={{ fontSize: 12 }}>
+              Controls how the queue handles items that were already downloaded before.
+            </span>
+          </div>
+
+          <ToggleSetting
+            title="Embed metadata in downloaded files"
+            description="Write title, uploader, and related metadata into finished downloads when supported"
+            checked={draft.embedMetadata}
+            onChange={(checked) => setDraft((prev) => ({ ...prev, embedMetadata: checked }))}
+          />
+
+          <ToggleSetting
+            title="Embed thumbnails in downloaded files"
+            description="Attach artwork or thumbnails to supported audio and video formats"
+            checked={draft.embedThumbnail}
+            onChange={(checked) => setDraft((prev) => ({ ...prev, embedThumbnail: checked }))}
+          />
 
           <ToggleSetting
             title="Automatically check for app updates"

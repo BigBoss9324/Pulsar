@@ -6,6 +6,14 @@ export interface Format {
 export interface FormatOpts {
   type: 'video' | 'audio'; quality?: string; audioFormat?: string; selector?: string
 }
+export interface DownloadPreferences {
+  filenameTemplate: string
+  subtitleMode: 'off' | 'separate' | 'embed'
+  subtitleLanguages: string
+  duplicateStrategy: 'skip' | 'allow' | 'overwrite'
+  embedMetadata: boolean
+  embedThumbnail: boolean
+}
 export interface VideoInfo {
   title: string; thumbnail: string; duration: string; uploader: string; formats: Format[]
 }
@@ -14,14 +22,22 @@ export interface PlaylistItem {
 }
 export interface PlaylistInfo { title: string; items: PlaylistItem[] }
 export interface DownloadOpts {
-  url: string; format: FormatOpts; outputDir: string; filename: string; downloader?: 'ytdlp'
+  id: string; url: string; format: FormatOpts; outputDir: string; filename: string; downloadPrefs: DownloadPreferences; downloader?: 'ytdlp'
 }
 export interface HistoryItem {
   id: string; url: string; title: string; thumbnail: string; duration: string
   format: FormatOpts; formatLabel: string; outputDir: string; outputPath?: string; fileSize?: number; completedAt: string
 }
 export interface StatusEvent { type: 'info' | 'ready' | 'error'; message: string }
-export interface ProgressEvent { percent: number; speed: string }
+export interface ProgressEvent {
+  id: string
+  percent: number
+  speed: string
+  eta: string
+  total: string
+  transferred: string
+  raw: string
+}
 export interface GithubRelease {
   tag_name: string
   name: string
@@ -40,6 +56,12 @@ export interface AppUpdateInfo {
 export interface AppSettings {
   defaultOutputDir: string
   defaultFormatId: string
+  filenameTemplate: string
+  subtitleMode: 'off' | 'separate' | 'embed'
+  subtitleLanguages: string
+  duplicateStrategy: 'skip' | 'allow' | 'overwrite'
+  embedMetadata: boolean
+  embedThumbnail: boolean
   autoCheckUpdates: boolean
   autoOpenFolder: boolean
   allowPrerelease: boolean
@@ -59,10 +81,32 @@ export interface PersistedQueueItem {
   status: 'pending' | 'downloading' | 'done' | 'error'
   progress: number
   speed: string
+  eta?: string
+  total?: string
+  transferred?: string
   error?: string
+  errorDetails?: string
+  attempts?: number
+  maxAttempts?: number
+  lastStartedAt?: string
+  lastFinishedAt?: string
+  resumable?: boolean
   downloader?: 'ytdlp'
+  downloadPrefs?: DownloadPreferences
   outputPath?: string
   fileSize?: number
+}
+
+export interface DownloadResult {
+  success: boolean
+  outputDir: string
+  outputPath?: string
+  fileSize?: number
+  error?: string
+  details?: string
+  retryable?: boolean
+  cancelled?: boolean
+  resumable?: boolean
 }
 
 function on<T>(channel: string, cb: (data: T) => void): () => void {
@@ -86,8 +130,8 @@ const api = {
   revealItem: (p: string) => ipcRenderer.invoke('reveal-item', p) as Promise<void>,
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates') as Promise<void>,
   downloadAppUpdate: () => ipcRenderer.invoke('download-app-update') as Promise<void>,
-  download: (opts: DownloadOpts) => ipcRenderer.invoke('download', opts) as Promise<{ success: boolean; outputDir: string; outputPath?: string; fileSize?: number }>,
-  cancelDownload: () => ipcRenderer.invoke('cancel-download') as Promise<void>,
+  download: (opts: DownloadOpts) => ipcRenderer.invoke('download', opts) as Promise<DownloadResult>,
+  cancelDownload: (id?: string) => ipcRenderer.invoke('cancel-download', id) as Promise<void>,
   openFolder: (p: string) => ipcRenderer.invoke('open-folder', p) as Promise<void>,
   getHistory: () => ipcRenderer.invoke('get-history') as Promise<HistoryItem[]>,
   saveHistoryItem: (item: HistoryItem) => ipcRenderer.invoke('save-history-item', item) as Promise<void>,

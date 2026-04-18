@@ -251,6 +251,15 @@
   flex-shrink: 0;
 }
 
+.queueSubline {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .statusDot {
   width: 6px;
   height: 6px;

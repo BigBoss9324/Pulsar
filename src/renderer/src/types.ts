@@ -14,6 +14,15 @@ export interface FormatOpts {
   selector?: string
 }
 
+export interface DownloadPreferences {
+  filenameTemplate: string
+  subtitleMode: 'off' | 'separate' | 'embed'
+  subtitleLanguages: string
+  duplicateStrategy: 'skip' | 'allow' | 'overwrite'
+  embedMetadata: boolean
+  embedThumbnail: boolean
+}
+
 export interface VideoInfo {
   title: string
   thumbnail: string
@@ -44,8 +53,18 @@ export interface QueueItem {
   status: 'pending' | 'downloading' | 'done' | 'error'
   progress: number
   speed: string
+  eta?: string
+  total?: string
+  transferred?: string
   error?: string
+  errorDetails?: string
+  attempts?: number
+  maxAttempts?: number
+  lastStartedAt?: string
+  lastFinishedAt?: string
+  resumable?: boolean
   downloader?: 'ytdlp'
+  downloadPrefs?: DownloadPreferences
   outputPath?: string
   fileSize?: number
 }
@@ -85,6 +104,12 @@ export type AppStatus = { type: 'info' | 'ready' | 'error'; message: string }
 export interface AppSettings {
   defaultOutputDir: string
   defaultFormatId: string
+  filenameTemplate: string
+  subtitleMode: 'off' | 'separate' | 'embed'
+  subtitleLanguages: string
+  duplicateStrategy: 'skip' | 'allow' | 'overwrite'
+  embedMetadata: boolean
+  embedThumbnail: boolean
   autoCheckUpdates: boolean
   autoOpenFolder: boolean
   allowPrerelease: boolean
