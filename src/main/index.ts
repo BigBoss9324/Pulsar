@@ -518,7 +518,7 @@ function defaultAppSettings(): AppSettings {
     subtitleMode: 'off',
     subtitleLanguages: 'en.*',
     duplicateStrategy: 'skip',
-    onError: 'continue',
+    onError: 'wait-3',
     discordWebhookUrl: '',
     discordAttachFile: false,
     discordStripMetadata: false,
