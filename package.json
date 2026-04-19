@@ -1,6 +1,6 @@
 {
   "name": "pulsar",
-  "version": "1.1.9",
+  "version": "1.2.0",
   "description": "Multi-service video & music downloader",
   "author": "Admin",
   "main": "./out/main/index.js",
@@ -15,9 +15,9 @@
     "predist": "npm run clean && npm run build && npm run gen-installer-assets",
     "dist": "electron-builder",
     "prepublish-latest": "npm run build",
-    "publish-latest": "electron-builder --publish always",
+    "publish-latest": "electron-builder --publish always && npm run build-stub && node scripts/upload-stub.js",
     "prepublish-beta": "npm run build",
-    "publish-beta": "set EP_PRE_RELEASE=true&& electron-builder --publish always",
+    "publish-beta": "set EP_PRE_RELEASE=true&& electron-builder --publish always && npm run build-stub && node scripts/upload-stub.js",
     "build-stub": "node scripts/build-stub.js"
   },
   "dependencies": {
@@ -62,7 +62,7 @@
     ],
     "extraMetadata": {
       "main": "out/main/index.js",
-      "pulsarBuildChannel": "release"
+      "pulsarBuildChannel": "dev"
     },
     "extraResources": [
       {
@@ -102,7 +102,7 @@
       "menuCategory": "Pulsar",
       "shortcutName": "Pulsar",
       "runAfterFinish": true,
-      "artifactName": "PulsarSetup.exe",
+      "artifactName": "${productName}Setup-${version}.${ext}",
       "include": "build/installer.nsh"
     }
   }

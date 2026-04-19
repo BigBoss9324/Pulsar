@@ -8,6 +8,7 @@ import { pathToFileURL } from 'url'
 
 const IS_WIN = process.platform === 'win32'
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
+const MIN_SPLASH_MS = 1200
 const APP_ID = 'com.pulsar.downloader'
 
 if (IS_WIN) app.setAppUserModelId(APP_ID)
@@ -20,6 +21,7 @@ let LOG_PATH: string
 
 let mainWindow: BrowserWindow
 let splashWindow: BrowserWindow | null = null
+let splashShownAt = 0
 let activeProc: ChildProcess | null = null
 let activeDownloadId: string | null = null
 let setupReady = false
@@ -101,6 +103,7 @@ function createSplashWindow(): void {
 
   splashWindow.once('ready-to-show', () => {
     if (!splashWindow || splashWindow.isDestroyed()) return
+    splashShownAt = Date.now()
     splashWindow.show()
     splashWindow.webContents.send('splash-update', {
       icon: splashIconUrl(),
@@ -150,8 +153,14 @@ function createWindow(): void {
 
   mainWindow.once('ready-to-show', () => {
     clearTimeout(showFallback)
-    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close()
-    mainWindow.show()
+    const revealMainWindow = () => {
+      if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close()
+      mainWindow.show()
+    }
+
+    const remainingSplashMs = Math.max(0, MIN_SPLASH_MS - (Date.now() - splashShownAt))
+    if (remainingSplashMs > 0) setTimeout(revealMainWindow, remainingSplashMs)
+    else revealMainWindow()
   })
 
   mainWindow.webContents.on('did-fail-load', (_e, code, desc) => {
@@ -651,7 +660,7 @@ function configureAutoUpdates(): void {
     const percent = Math.round(progress.percent)
     const mbps = (progress.bytesPerSecond / (1024 * 1024)).toFixed(1)
     sendNonBlockingStatus(`Ready - downloading update... ${percent}% at ${mbps} MB/s`)
-    sendSplash(`Downloading update... ${percent}%`, percent)
+    sendSplash(`Updating... ${percent}%`, percent)
   })
 
   autoUpdater.on('update-downloaded', () => {
@@ -841,7 +850,7 @@ ipcMain.handle('download-app-update', async () => {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide()
   splashWindow!.webContents.send('splash-update', {
     icon: splashIconUrl(),
-    status: 'Downloading update...',
+    status: 'Updating...',
     progress: 0,
   })
 

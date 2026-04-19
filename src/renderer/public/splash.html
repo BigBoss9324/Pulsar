@@ -62,12 +62,17 @@
       width: 88px;
       height: 88px;
       position: relative;
-      object-fit: contain;
-      opacity: 0;
-      transition: opacity 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 1;
     }
 
-    #logo.loaded { opacity: 1; }
+    #logo svg {
+      width: 88px;
+      height: 88px;
+      filter: drop-shadow(0 0 18px rgba(109, 40, 217, 0.24));
+    }
 
     #status {
       font-size: 12px;
@@ -129,7 +134,15 @@
   <div class="content">
     <div class="logo-wrap">
       <div class="logo-glow"></div>
-      <img id="logo" src="" alt="Pulsar" onload="this.classList.add('loaded')">
+      <div id="logo" aria-label="Pulsar logo">
+        <svg viewBox="0 0 28 28" fill="none" aria-hidden="true">
+          <rect x="1" y="11" width="3.5" height="6" rx="1.75" fill="#8b5cf6" opacity="0.5" />
+          <rect x="6" y="7" width="3.5" height="14" rx="1.75" fill="#8b5cf6" opacity="0.7" />
+          <rect x="11" y="2" width="3.5" height="24" rx="1.75" fill="#8b5cf6" />
+          <rect x="16" y="7" width="3.5" height="14" rx="1.75" fill="#8b5cf6" opacity="0.7" />
+          <rect x="21" y="11" width="3.5" height="6" rx="1.75" fill="#8b5cf6" opacity="0.5" />
+        </svg>
+      </div>
     </div>
     <div id="status">Starting...</div>
   </div>
