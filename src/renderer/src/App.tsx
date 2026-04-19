@@ -144,7 +144,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className={styles.main}>
+      <main className={`${styles.main} appScroll`}>
         <section className={tab === 'download' ? styles.panelActive : styles.panelHidden}>
           {settings && (
             <DownloadTab

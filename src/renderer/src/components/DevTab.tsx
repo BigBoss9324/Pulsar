@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { AppStatus, AppSettings, HistoryItem } from '../types'
+import ConfirmDialog from './ConfirmDialog'
 import styles from './DevTab.module.css'
 
 interface Props {
@@ -23,6 +24,7 @@ function formatBytes(bytes: number) {
 
 export default function DevTab({ version, status, showToast }: Props) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const [historyStats, setHistoryStats] = useState<{ count: number; totalBytes: number; latest: string | null } | null>(null)
   const [ytdlpVersion, setYtdlpVersion] = useState<string | null>(null)
   const [queueState, setQueueState] = useState<unknown[] | null>(null)
@@ -112,6 +114,15 @@ export default function DevTab({ version, status, showToast }: Props) {
             </button>
             <button className="btn btn-secondary btn-sm" onClick={() => showToast('Info toast fired', '')}>
               Info
+            </button>
+          </div>
+        </div>
+
+        <div className={`card ${styles.panel}`}>
+          <h3 className={styles.panelTitle}>Confirm dialog tester</h3>
+          <div className={styles.buttonRow}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setConfirmOpen(true)}>
+              Open confirm
             </button>
           </div>
         </div>
@@ -209,6 +220,17 @@ export default function DevTab({ version, status, showToast }: Props) {
           )}
         </div>
       </div>
+
+      {confirmOpen && (
+        <ConfirmDialog
+          title="Test confirmation"
+          body="This is the reusable ConfirmDialog component. Confirming will just close it."
+          confirmLabel="Confirm"
+          confirmVariant="btn-primary"
+          onConfirm={() => { setConfirmOpen(false); showToast('Confirmed!', 'success') }}
+          onCancel={() => setConfirmOpen(false)}
+        />
+      )}
     </section>
   )
 }

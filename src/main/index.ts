@@ -504,6 +504,23 @@ function getWipeFileTargets(): string[] {
   ]))
 }
 
+function stopActiveDownloadProcess(proc: ChildProcess | null): void {
+  if (!proc) return
+
+  try {
+    if (IS_WIN && proc.pid) {
+      // Kill the full process tree so yt-dlp and any child downloader stop immediately.
+      const killer = spawn('taskkill', ['/PID', String(proc.pid), '/T', '/F'], { stdio: 'ignore' })
+      killer.on('error', (err) => logError('Failed to taskkill active download process', err))
+      return
+    }
+
+    proc.kill('SIGKILL')
+  } catch (err) {
+    logError('Failed to stop active download process', err)
+  }
+}
+
 function configureAutoUpdates(): void {
   if (!app.isPackaged) return
 
@@ -817,7 +834,7 @@ function downloadWithYtdlp({ id, url, format, outputDir, filename, downloadPrefs
 
 ipcMain.handle('cancel-download', (_e, id?: string) => {
   if (activeProc && (!id || id === activeDownloadId)) {
-    activeProc.kill()
+    stopActiveDownloadProcess(activeProc)
     activeProc = null
     activeDownloadId = null
   }

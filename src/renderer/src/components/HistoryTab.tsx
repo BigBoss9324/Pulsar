@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { HistoryItem } from '../types'
 import Thumb from './Thumb'
+import ConfirmDialog from './ConfirmDialog'
 import styles from './HistoryTab.module.css'
 
 interface Props {
@@ -34,6 +35,7 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
   const [items, setItems] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false)
 
   useEffect(() => {
     window.api.getHistory().then((h) => { setItems(h); setLoading(false) })
@@ -47,6 +49,7 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
   async function handleClearAll() {
     await window.api.clearHistory()
     setItems([])
+    setConfirmClearOpen(false)
     showToast('History cleared', '')
   }
 
@@ -79,7 +82,7 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
             Open default folder
           </button>
         )}
-        <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={handleClearAll}>
+        <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setConfirmClearOpen(true)}>
           Clear all
         </button>
       </div>
@@ -92,7 +95,7 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
         onChange={(e) => setSearch(e.target.value)}
       />
 
-      <div className={`${styles.list} appScroll`}>
+      <div className={styles.list}>
         {filtered.map((item) => (
           <div key={item.id} className={styles.row}>
             <Thumb src={item.thumbnail} className={styles.thumb} />
@@ -128,6 +131,16 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
           </div>
         ))}
       </div>
+
+      {confirmClearOpen && (
+        <ConfirmDialog
+          title="Clear all history?"
+          body="This will remove every item from your download history. This cannot be undone."
+          confirmLabel="Clear history"
+          onConfirm={() => void handleClearAll()}
+          onCancel={() => setConfirmClearOpen(false)}
+        />
+      )}
     </div>
   )
 }

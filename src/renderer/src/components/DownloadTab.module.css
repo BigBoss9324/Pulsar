@@ -203,16 +203,120 @@
   vertical-align: middle;
 }
 
+/* ── Now Downloading ── */
+.nowDownloading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(96,165,250,0.07);
+  border: 1px solid rgba(96,165,250,0.22);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  margin-bottom: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.nowDownloadingThumb {
+  width: 64px;
+  height: 36px;
+  border-radius: 4px;
+  background: var(--surface3);
+  flex-shrink: 0;
+}
+
+.nowDownloadingMeta {
+  flex: 1;
+  min-width: 0;
+}
+
+.nowDownloadingLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #60a5fa;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.nowDownloadingPulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #60a5fa;
+  box-shadow: 0 0 6px #60a5fa88;
+  animation: pulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+.nowDownloadingTitle {
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nowDownloadingStats {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.nowDownloadingProgress {
+  height: 3px;
+  background: var(--surface3);
+  border-radius: 99px;
+  margin-top: 5px;
+  overflow: hidden;
+}
+
+.nowDownloadingFill {
+  height: 100%;
+  background: #60a5fa;
+  border-radius: 99px;
+  transition: width 0.3s ease;
+}
+
+.nowDownloadingFillIndeterminate {
+  height: 100%;
+  width: 40%;
+  background: #60a5fa;
+  border-radius: 99px;
+  animation: indeterminate 1.4s ease-in-out infinite;
+}
+
+.nowDownloadingPaused {
+  background: rgba(251,191,36,0.07);
+  border-color: rgba(251,191,36,0.22);
+}
+
+.nowDownloadingPaused .nowDownloadingLabel {
+  color: #fbbf24;
+}
+
+.nowDownloadingFailed {
+  background: rgba(239,68,68,0.07);
+  border-color: rgba(239,68,68,0.22);
+}
+
+.nowDownloadingFailed .nowDownloadingLabel {
+  color: var(--danger);
+}
+
 /* ── Queue ── */
 .queueSection {
   display: flex;
   flex-direction: column;
-}
-
-.queueScrollArea {
-  max-height: 420px;
-  overflow-y: auto;
-  padding-right: 4px;
 }
 
 .queueList {
