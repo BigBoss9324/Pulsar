@@ -10,7 +10,8 @@
     "start": "electron-vite dev",
     "prepack": "npm run build",
     "pack": "electron-builder --dir",
-    "predist": "npm run build",
+    "gen-installer-assets": "node scripts/generate-installer-images.js",
+    "predist": "npm run build && npm run gen-installer-assets",
     "dist": "electron-builder",
     "prepublish-latest": "npm run build",
     "publish-latest": "electron-builder --publish always",
@@ -32,6 +33,7 @@
     "electron": "^33.0.0",
     "electron-builder": "^26.0.12",
     "electron-vite": "^2.3.0",
+    "jimp": "^0.22.12",
     "rcedit": "^5.0.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.10"
@@ -79,7 +81,16 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "installerHeaderIcon": "build/Pulsar.ico",
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "menuCategory": "Pulsar",
+      "shortcutName": "Pulsar",
+      "license": "build/license.rtf",
+      "runAfterFinish": true
     }
   }
 }
