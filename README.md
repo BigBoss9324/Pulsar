@@ -20,7 +20,7 @@ Spotify is not yet supported but I have plans to add it in the future.
 
 ### Option 1 — Always-Latest Installer (Recommended)
 
-Download **[PulsarSetup.exe](https://github.com/BigBoss9324/Pulsar/releases/PulsarSetup.exe)** — a small stub installer that automatically downloads and installs the current latest version every time you run it. You never need to update this file.
+Download **[PulsarSetup.exe](https://github.com/BigBoss9324/Pulsar/releases/latest/download/PulsarSetup.exe)** — a small stub installer that automatically downloads and installs the current latest version every time you run it. You never need to update this file.
 
 ### Option 2 — Specific Version
 
