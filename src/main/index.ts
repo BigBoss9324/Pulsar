@@ -530,7 +530,7 @@ function stopActiveDownloadProcess(proc: ChildProcess | null): void {
 function configureAutoUpdates(): void {
   if (!app.isPackaged) return
 
-  autoUpdater.autoDownload = true
+  autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.allowPrerelease = currentSettings.allowPrerelease
 
@@ -544,7 +544,7 @@ function configureAutoUpdates(): void {
     const prerelease = await resolveUpdatePrerelease({
       version: releaseVersion,
       releaseName: info.releaseName || undefined,
-      prerelease: info.prerelease,
+      prerelease: (info as unknown as { prerelease?: boolean }).prerelease,
     })
     sendNonBlockingStatus(`Ready - update available: v${releaseVersion}`)
     sendToast(`Update available: v${releaseVersion}`, 'info')
@@ -562,6 +562,12 @@ function configureAutoUpdates(): void {
     sendToast('You are on the latest version.', 'success')
   })
 
+  autoUpdater.on('download-progress', (progress) => {
+    const percent = Math.round(progress.percent)
+    const mbps = (progress.bytesPerSecond / (1024 * 1024)).toFixed(1)
+    sendNonBlockingStatus(`Ready - downloading update... ${percent}% at ${mbps} MB/s`)
+  })
+
   autoUpdater.on('update-downloaded', () => {
     if (updateInstallScheduled) return
 
@@ -571,7 +577,7 @@ function configureAutoUpdates(): void {
 
     setTimeout(() => {
       try {
-        autoUpdater.quitAndInstall(false, true)
+        autoUpdater.quitAndInstall(true, true)
       } catch (err) {
         updateInstallScheduled = false
         logError('Failed to restart and install update', err)

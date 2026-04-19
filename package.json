@@ -89,7 +89,6 @@
       "createStartMenuShortcut": true,
       "menuCategory": "Pulsar",
       "shortcutName": "Pulsar",
-      "license": "build/license.rtf",
       "runAfterFinish": true
     }
   }
