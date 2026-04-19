@@ -40,6 +40,73 @@
   gap: 12px;
 }
 
+.labelRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.infoHint {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.infoButton {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border2);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+  padding: 0;
+}
+
+.infoButton:hover,
+.infoButton:focus-visible {
+  color: var(--text);
+  border-color: rgba(96, 165, 250, 0.45);
+  outline: none;
+}
+
+.infoTooltip {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 240px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border2);
+  background: rgba(18, 18, 18, 0.98);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease;
+  z-index: 5;
+}
+
+.infoHint:hover .infoTooltip,
+.infoButton:focus-visible + .infoTooltip {
+  opacity: 1;
+}
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .divider {
   border: none;
   border-top: 1px solid var(--border);
@@ -317,6 +384,17 @@
 }
 
 @media (max-width: 720px) {
+  .actionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .infoTooltip {
+    left: 0;
+    top: calc(100% + 8px);
+    transform: none;
+    width: min(240px, 70vw);
+  }
+
   .releaseTopline {
     flex-direction: column;
     align-items: flex-start;

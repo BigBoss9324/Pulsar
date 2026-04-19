@@ -3,6 +3,7 @@ import type { AppSettings, GithubRelease } from '../types'
 import PathField from './PathField'
 import ToggleSetting from './ToggleSetting'
 import styles from './SettingsModal.module.css'
+import { renderReleaseNotes } from '../utils/renderReleaseNotes'
 
 const FORMAT_OPTIONS = [
   { id: 'preset-best', label: 'Best quality (MP4)' },
@@ -26,6 +27,9 @@ const DUPLICATE_OPTIONS = [
 
 interface Props {
   settings: AppSettings
+  version: string
+  onCheckForUpdates: () => Promise<void>
+  onCopyVersion: () => Promise<void> | void
   onClose: () => void
   onSave: (settings: AppSettings) => Promise<void>
 }
@@ -34,80 +38,33 @@ function normalizeTag(tag: string | null) {
   return (tag ?? '').replace(/^v/i, '').trim()
 }
 
-function renderReleaseNotes(body: string) {
-  const lines = body
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map((line) => line.trimEnd())
-
-  const blocks: JSX.Element[] = []
-  let bulletItems: string[] = []
-  let paragraphLines: string[] = []
-
-  const flushBullets = () => {
-    if (!bulletItems.length) return
-    blocks.push(
-      <ul key={`ul-${blocks.length}`} className={styles.releaseNotesList}>
-        {bulletItems.map((item, index) => (
-          <li key={`li-${index}`}>{item}</li>
-        ))}
-      </ul>,
-    )
-    bulletItems = []
-  }
-
-  const flushParagraph = () => {
-    if (!paragraphLines.length) return
-    blocks.push(
-      <p key={`p-${blocks.length}`} className={styles.releaseNotesParagraph}>
-        {paragraphLines.join(' ')}
-      </p>,
-    )
-    paragraphLines = []
-  }
-
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed) {
-      flushBullets()
-      flushParagraph()
-      continue
-    }
-
-    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/)
-    if (headingMatch) {
-      flushBullets()
-      flushParagraph()
-      const level = headingMatch[1].length
-      const content = headingMatch[2].trim()
-      if (level === 1) {
-        blocks.push(<h3 key={`h-${blocks.length}`} className={styles.releaseNotesTitle}>{content}</h3>)
-      } else {
-        blocks.push(<h4 key={`h-${blocks.length}`} className={styles.releaseNotesHeading}>{content}</h4>)
-      }
-      continue
-    }
-
-    const bulletMatch = trimmed.match(/^[-*]\s+(.+)$/)
-    if (bulletMatch) {
-      flushParagraph()
-      bulletItems.push(bulletMatch[1].trim())
-      continue
-    }
-
-    paragraphLines.push(trimmed)
-  }
-
-  flushBullets()
-  flushParagraph()
-
-  return blocks.length ? blocks : <p className={styles.releaseNotesParagraph}>{body}</p>
+function SettingLabel({ text, help }: { text: string; help?: string }) {
+  return (
+    <div className={styles.labelRow}>
+      <label className="label">{text}</label>
+      {help && <InfoHint text={help} />}
+    </div>
+  )
 }
 
-export default function SettingsModal({ settings, onClose, onSave }: Props) {
+function InfoHint({ text }: { text: string }) {
+  return (
+    <span className={styles.infoHint}>
+      <button
+        className={styles.infoButton}
+        type="button"
+        aria-label={text}
+      >
+        i
+      </button>
+      <span className={styles.infoTooltip} role="tooltip">{text}</span>
+    </span>
+  )
+}
+
+export default function SettingsModal({ settings, version, onCheckForUpdates, onCopyVersion, onClose, onSave }: Props) {
   const [draft, setDraft] = useState(settings)
   const [saving, setSaving] = useState(false)
-  const [version, setVersion] = useState<string | null>(null)
   const [releases, setReleases] = useState<GithubRelease[] | null>(null)
   const [releasesLoading, setReleasesLoading] = useState(false)
   const [releasesError, setReleasesError] = useState<string | null>(null)
@@ -116,7 +73,6 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
-    window.api.getAppVersion().then(setVersion).catch(() => {})
     loadReleases()
     return () => { document.body.style.overflow = '' }
   }, [])
@@ -159,7 +115,7 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
         ...draft,
         filenameTemplate: draft.filenameTemplate.trim() || '%(title)s',
         subtitleLanguages: draft.subtitleLanguages.trim() || 'en.*',
-        maxHistoryItems: Math.max(10, Number(draft.maxHistoryItems) || 125),
+        maxHistoryItems: Math.max(10, Number(draft.maxHistoryItems) || 500),
       })
       onClose()
     } finally {
@@ -172,13 +128,12 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
 
   return (
     <div className={styles.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={styles.modal}>
+      <div className={`${styles.modal} appScroll`}>
         <div className={styles.header}>
           <div>
             <div className={styles.title}>Settings</div>
             <div className="muted" style={{ fontSize: 12 }}>Defaults and app behavior</div>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
         </div>
 
         <div className={styles.section}>
@@ -208,7 +163,7 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
           />
 
           <div className="flex-col gap-1">
-            <label className="label">Default format</label>
+            <SettingLabel text="Default format" help="Choose the format Pulsar selects first when you fetch a link." />
             <select
               className="select"
               value={draft.defaultFormatId}
@@ -221,7 +176,7 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
           </div>
 
           <div className="flex-col gap-1">
-            <label className="label">Max history items</label>
+            <SettingLabel text="Max history items" help="Limits how many completed downloads Pulsar keeps in the History tab before older entries are trimmed." />
             <input
               className="input"
               type="number"
@@ -233,7 +188,7 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
           </div>
 
           <div className="flex-col gap-1">
-            <label className="label">Filename template</label>
+            <SettingLabel text="Filename template" help="Controls how finished downloads are named. For example, %(title)s uses the video title as the filename." />
             <input
               className="input"
               type="text"
@@ -247,7 +202,7 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
           </div>
 
           <div className="flex-col gap-1">
-            <label className="label">Subtitle handling</label>
+            <SettingLabel text="Subtitle handling" help="Choose whether subtitles stay off, download as separate files, or get embedded into supported downloads." />
             <select
               className="select"
               value={draft.subtitleMode}
@@ -261,7 +216,7 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
 
           {draft.subtitleMode !== 'off' && (
             <div className="flex-col gap-1">
-              <label className="label">Subtitle languages</label>
+              <SettingLabel text="Subtitle languages" help="Sets which subtitle languages yt-dlp should download, such as en.*, en,es, or all." />
               <input
                 className="input"
                 type="text"
@@ -276,7 +231,7 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
           )}
 
           <div className="flex-col gap-1">
-            <label className="label">Duplicate rule</label>
+            <SettingLabel text="Duplicate rule" help="Decides whether items already seen in your queue or history should be skipped, allowed again, or overwritten." />
             <select
               className="select"
               value={draft.duplicateStrategy}
@@ -286,9 +241,6 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
                 <option key={option.id} value={option.id}>{option.label}</option>
               ))}
             </select>
-            <span className="muted" style={{ fontSize: 12 }}>
-              Controls how the queue handles items that were already downloaded before.
-            </span>
           </div>
 
           <ToggleSetting
@@ -328,6 +280,44 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
             checked={draft.autoOpenFolder}
             onChange={(checked) => setDraft((prev) => ({ ...prev, autoOpenFolder: checked }))}
           />
+        </div>
+
+        <div className={styles.divider} />
+
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <div className={styles.sectionTitle}>App</div>
+              <div className={styles.sectionSubtitle}>Version, updates, and local app data</div>
+            </div>
+          </div>
+
+          <div className={styles.actionGrid}>
+            <button className="btn btn-secondary" type="button" onClick={() => onCopyVersion()}>
+              Copy version
+            </button>
+            <button className="btn btn-secondary" type="button" onClick={() => void onCheckForUpdates()}>
+              Check for updates
+            </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => window.api.openExternalUrl('https://github.com/BigBoss9324/Pulsar/releases').catch(() => {})}
+            >
+              View releases
+            </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => window.api.openAppDataFolder().catch(() => {})}
+            >
+              Open app data
+            </button>
+          </div>
+
+          <span className="muted" style={{ fontSize: 12 }}>
+            {version ? `Installed version: v${version}` : 'Installed version unavailable'}
+          </span>
         </div>
 
         <div className={styles.divider} />
@@ -380,7 +370,12 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
                 <span className={styles.currentBadge}>Installed</span>
               </div>
               <div className={styles.releaseNotes}>
-                {renderReleaseNotes(currentRelease.body)}
+                {renderReleaseNotes(currentRelease.body, {
+                  title: styles.releaseNotesTitle,
+                  heading: styles.releaseNotesHeading,
+                  paragraph: styles.releaseNotesParagraph,
+                  list: styles.releaseNotesList,
+                })}
               </div>
             </div>
           )}
@@ -438,7 +433,12 @@ export default function SettingsModal({ settings, onClose, onSave }: Props) {
 
                       {isExpanded && hasNotes && (
                         <div className={styles.releaseNotes}>
-                          {renderReleaseNotes(release.body ?? '')}
+                          {renderReleaseNotes(release.body ?? '', {
+                            title: styles.releaseNotesTitle,
+                            heading: styles.releaseNotesHeading,
+                            paragraph: styles.releaseNotesParagraph,
+                            list: styles.releaseNotesList,
+                          })}
                         </div>
                       )}
                     </div>

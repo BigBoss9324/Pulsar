@@ -53,60 +53,29 @@
   -webkit-app-region: no-drag;
 }
 
-.menuWrap {
-  position: relative;
-}
-
 .menuButton {
   border-color: var(--border);
   color: var(--text);
   min-width: 0;
 }
 
-.menuPanel {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  min-width: 180px;
-  padding: 6px;
-  border-radius: 12px;
-  border: 1px solid var(--border2);
-  background: rgba(20, 20, 20, 0.98);
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.38);
-  z-index: 20;
-}
-
-.menuItem {
-  width: 100%;
-  border: none;
-  background: transparent;
-  color: var(--text);
-  text-align: left;
-  padding: 9px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 12px;
-}
-.menuItem:hover {
-  background: var(--surface2);
-}
-
-.menuDivider {
-  height: 1px;
-  background: var(--border);
-  margin: 4px 6px;
-}
-
-.menuItemDanger {
-  color: #f87171;
-}
-.menuItemDanger:hover {
-  background: rgba(239, 68, 68, 0.1);
-}
-
 .version {
   color: var(--text-muted);
   font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.betaBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 146, 60, 0.32);
+  background: rgba(251, 146, 60, 0.12);
+  color: #fb923c;
+  font-size: 11px;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
 }
@@ -312,7 +281,6 @@
 }
 
 .updateNotes {
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
   max-height: 260px;
   overflow-y: auto;
@@ -323,6 +291,37 @@
   font-size: 12px;
   line-height: 1.55;
   color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.updateNotesTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.updateNotesHeading {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.updateNotesParagraph {
+  margin: 0;
+}
+
+.updateNotesList {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .updateActions {

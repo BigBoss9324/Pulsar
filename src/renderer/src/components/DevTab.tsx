@@ -172,16 +172,16 @@ export default function DevTab({ version, status, showToast }: Props) {
           </div>
         </div>
 
-        <div className={`card ${styles.panel}`}>
+        <div className={`card ${styles.panel} ${styles.widePanel}`}>
           <h3 className={styles.panelTitle}>Settings</h3>
           {settings ? (
-            <pre className={styles.jsonDump}>{JSON.stringify(settings, null, 2)}</pre>
+            <pre className={`${styles.jsonDump} appScroll`}>{JSON.stringify(settings, null, 2)}</pre>
           ) : (
             <span className="muted">Loading…</span>
           )}
         </div>
 
-        <div className={`card ${styles.panel}`}>
+        <div className={`card ${styles.panel} ${styles.widePanel}`}>
           <div className={styles.panelHeader}>
             <h3 className={styles.panelTitle}>Queue</h3>
             <button className="btn btn-ghost btn-sm" onClick={refreshQueue}>Refresh</button>
@@ -191,7 +191,7 @@ export default function DevTab({ version, status, showToast }: Props) {
           ) : queueState.length === 0 ? (
             <span className="muted">Queue is empty</span>
           ) : (
-            <pre className={styles.jsonDump}>{JSON.stringify(queueState, null, 2)}</pre>
+            <pre className={`${styles.jsonDump} appScroll`}>{JSON.stringify(queueState, null, 2)}</pre>
           )}
         </div>
 
@@ -205,7 +205,7 @@ export default function DevTab({ version, status, showToast }: Props) {
           ) : logContent === '' ? (
             <span className="muted">Log file is empty</span>
           ) : (
-            <pre className={styles.logDump} ref={logRef}>{logContent}</pre>
+            <pre className={`${styles.logDump} appScroll`} ref={logRef}>{logContent}</pre>
           )}
         </div>
       </div>

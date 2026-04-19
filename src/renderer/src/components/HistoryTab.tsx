@@ -92,7 +92,7 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
         onChange={(e) => setSearch(e.target.value)}
       />
 
-      <div className={styles.list}>
+      <div className={`${styles.list} appScroll`}>
         {filtered.map((item) => (
           <div key={item.id} className={styles.row}>
             <Thumb src={item.thumbnail} className={styles.thumb} />

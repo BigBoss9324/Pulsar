@@ -209,6 +209,12 @@
   flex-direction: column;
 }
 
+.queueScrollArea {
+  max-height: 420px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .queueList {
   display: flex;
   flex-direction: column;

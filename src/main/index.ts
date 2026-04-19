@@ -429,7 +429,7 @@ function defaultAppSettings(): AppSettings {
     autoCheckUpdates: true,
     allowPrerelease: false,
     autoOpenFolder: false,
-    maxHistoryItems: 125,
+    maxHistoryItems: 500,
     enableDevMode: false,
   }
 }

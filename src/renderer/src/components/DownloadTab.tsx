@@ -714,32 +714,34 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
               </button>
             )}
           </div>
-          <div className={styles.queueList}>
-            {queue.map((item) => (
-              <QueueRow
-                key={item.id}
-                item={item}
-                onRemove={() => removeQueueItem(item.id)}
-                onCancel={() => window.api.cancelDownload(item.id)}
-                onOpenFolder={() => window.api.openFolder(item.outputDir)}
-                onReveal={() => item.outputPath ? window.api.revealItem(item.outputPath) : Promise.resolve()}
-                onRetry={() => {
-                  updateQueue((q) => q.map((i) => i.id === item.id ? {
-                    ...i,
-                    status: 'pending',
-                    error: undefined,
-                    errorDetails: undefined,
-                    progress: 0,
-                    speed: '',
-                    eta: '',
-                    transferred: '',
-                  } : i))
-                  processQueue()
-                }}
-                onMoveUp={() => updateQueue((q) => moveQueueItem(q, item.id, -1))}
-                onMoveDown={() => updateQueue((q) => moveQueueItem(q, item.id, 1))}
-              />
-            ))}
+          <div className={`${styles.queueScrollArea} appScroll`}>
+            <div className={styles.queueList}>
+              {queue.map((item) => (
+                <QueueRow
+                  key={item.id}
+                  item={item}
+                  onRemove={() => removeQueueItem(item.id)}
+                  onCancel={() => window.api.cancelDownload(item.id)}
+                  onOpenFolder={() => window.api.openFolder(item.outputDir)}
+                  onReveal={() => item.outputPath ? window.api.revealItem(item.outputPath) : Promise.resolve()}
+                  onRetry={() => {
+                    updateQueue((q) => q.map((i) => i.id === item.id ? {
+                      ...i,
+                      status: 'pending',
+                      error: undefined,
+                      errorDetails: undefined,
+                      progress: 0,
+                      speed: '',
+                      eta: '',
+                      transferred: '',
+                    } : i))
+                    processQueue()
+                  }}
+                  onMoveUp={() => updateQueue((q) => moveQueueItem(q, item.id, -1))}
+                  onMoveDown={() => updateQueue((q) => moveQueueItem(q, item.id, 1))}
+                />
+              ))}
+            </div>
           </div>
         </div>
       )}

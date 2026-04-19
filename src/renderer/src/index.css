@@ -16,6 +16,12 @@
   --danger:       #ef4444;
   --radius:       8px;
   --radius-sm:    6px;
+  --scrollbar-track: rgba(255,255,255,0.06);
+  --scrollbar-thumb-start: rgba(96,165,250,0.85);
+  --scrollbar-thumb-end: rgba(59,130,246,0.55);
+  --scrollbar-thumb-hover-start: rgba(147,197,253,0.95);
+  --scrollbar-thumb-hover-end: rgba(59,130,246,0.7);
+  --scrollbar-thumb-border: rgba(18,18,18,0.9);
 }
 
 html, body, #root {
@@ -115,3 +121,28 @@ input, select, button, textarea { font-family: inherit; font-size: inherit; }
 .gap-4 { gap: 16px; }
 .items-center { align-items: center; }
 .flex-1 { flex: 1; min-width: 0; }
+
+.appScroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(96,165,250,0.65) var(--scrollbar-track);
+}
+
+.appScroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.appScroll::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 999px;
+}
+
+.appScroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--scrollbar-thumb-start), var(--scrollbar-thumb-end));
+  border-radius: 999px;
+  border: 2px solid var(--scrollbar-thumb-border);
+}
+
+.appScroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--scrollbar-thumb-hover-start), var(--scrollbar-thumb-hover-end));
+}

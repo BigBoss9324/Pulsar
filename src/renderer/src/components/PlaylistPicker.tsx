@@ -66,7 +66,7 @@ export default function PlaylistPicker({ title, items, defaultOutputDir, onAdd, 
 
   return (
     <div className={styles.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={styles.modal}>
+      <div className={`${styles.modal} appScroll`}>
         <div className={styles.header}>
           <div className={styles.headerTitle}>
             <span style={{ fontWeight: 600 }}>{title || 'Playlist'}</span>
@@ -98,7 +98,7 @@ export default function PlaylistPicker({ title, items, defaultOutputDir, onAdd, 
           </div>
         </div>
 
-        <div className={styles.list}>
+        <div className={`${styles.list} appScroll`}>
           {filtered.map((item) => (
             <div key={item.id} className={`${styles.item} ${selected.has(item.id) ? styles.itemSelected : ''}`}>
               <input
