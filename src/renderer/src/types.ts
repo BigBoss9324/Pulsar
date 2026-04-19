@@ -100,6 +100,13 @@ export interface AppUpdateInfo {
   prerelease?: boolean
 }
 
+export interface AppBuildInfo {
+  version: string
+  channel: string
+  isDevBuild: boolean
+  displayVersion: string
+}
+
 export type AppStatus = { type: 'info' | 'ready' | 'error'; message: string }
 export interface AppSettings {
   defaultOutputDir: string

@@ -53,6 +53,12 @@ export interface AppUpdateInfo {
   releaseDate?: string
   prerelease?: boolean
 }
+export interface AppBuildInfo {
+  version: string
+  channel: string
+  isDevBuild: boolean
+  displayVersion: string
+}
 export interface AppSettings {
   defaultOutputDir: string
   defaultFormatId: string
@@ -123,6 +129,7 @@ function on<T>(channel: string, cb: (data: T) => void): () => void {
 
 const api = {
   getAppVersion: () => ipcRenderer.invoke('get-app-version') as Promise<string>,
+  getAppBuildInfo: () => ipcRenderer.invoke('get-app-build-info') as Promise<AppBuildInfo>,
   getCurrentStatus: () => ipcRenderer.invoke('get-current-status') as Promise<StatusEvent>,
   getAppSettings: () => ipcRenderer.invoke('get-app-settings') as Promise<AppSettings>,
   saveAppSettings: (settings: AppSettings) => ipcRenderer.invoke('save-app-settings', settings) as Promise<AppSettings>,

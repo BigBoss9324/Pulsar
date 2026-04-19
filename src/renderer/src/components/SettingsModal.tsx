@@ -36,6 +36,7 @@ const ON_ERROR_OPTIONS = [
 interface Props {
   settings: AppSettings
   version: string
+  displayVersion: string
   onCheckForUpdates: () => Promise<void>
   onCopyVersion: () => Promise<void> | void
   onClose: () => void
@@ -70,7 +71,7 @@ function InfoHint({ text }: { text: string }) {
   )
 }
 
-export default function SettingsModal({ settings, version, onCheckForUpdates, onCopyVersion, onClose, onSave }: Props) {
+export default function SettingsModal({ settings, version, displayVersion, onCheckForUpdates, onCopyVersion, onClose, onSave }: Props) {
   const [draft, setDraft] = useState(settings)
   const [saving, setSaving] = useState(false)
   const [releases, setReleases] = useState<GithubRelease[] | null>(null)
@@ -394,7 +395,7 @@ export default function SettingsModal({ settings, version, onCheckForUpdates, on
           </div>
 
           <span className="muted" style={{ fontSize: 12 }}>
-            {version ? `Installed version: v${version}` : 'Installed version unavailable'}
+            {displayVersion ? `Installed version: v${displayVersion}` : 'Installed version unavailable'}
           </span>
         </div>
 
@@ -419,7 +420,7 @@ export default function SettingsModal({ settings, version, onCheckForUpdates, on
             <div className={styles.versionSummaryMain}>
               <div className={styles.versionKicker}>Current version</div>
               <div className={styles.versionSummaryRow}>
-                <div className={styles.versionValue}>{version ?? '…'}</div>
+                <div className={styles.versionValue}>{displayVersion || '…'}</div>
               </div>
               <div className={styles.versionMeta}>
                 {currentRelease?.published_at

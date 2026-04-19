@@ -4,6 +4,7 @@ import path from 'path'
 import fs from 'fs'
 import { spawn, ChildProcess } from 'child_process'
 import https from 'https'
+import { pathToFileURL } from 'url'
 
 const IS_WIN = process.platform === 'win32'
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
@@ -18,6 +19,7 @@ let QUEUE_PATH: string
 let LOG_PATH: string
 
 let mainWindow: BrowserWindow
+let splashWindow: BrowserWindow | null = null
 let activeProc: ChildProcess | null = null
 let activeDownloadId: string | null = null
 let setupReady = false
@@ -25,8 +27,90 @@ let updateInstallScheduled = false
 let updateDownloadRequested = false
 let currentStatus: { type: 'info' | 'ready' | 'error'; message: string } = { type: 'info', message: 'Initializing...' }
 let currentSettings: AppSettings = defaultAppSettings()
+let cachedBuildMetadata: { pulsarBuildChannel?: string } | null | undefined
 
 configureAppStoragePaths()
+
+function readBuildMetadata(): { pulsarBuildChannel?: string } | null {
+  if (cachedBuildMetadata !== undefined) return cachedBuildMetadata
+
+  try {
+    const packageJsonPath = path.join(app.getAppPath(), 'package.json')
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as { pulsarBuildChannel?: unknown }
+    cachedBuildMetadata = typeof packageJson.pulsarBuildChannel === 'string'
+      ? { pulsarBuildChannel: packageJson.pulsarBuildChannel }
+      : {}
+    return cachedBuildMetadata
+  } catch {
+    cachedBuildMetadata = null
+    return cachedBuildMetadata
+  }
+}
+
+function getAppBuildInfo(): { version: string; channel: string; isDevBuild: boolean; displayVersion: string } {
+  const version = app.getVersion()
+  const channel = readBuildMetadata()?.pulsarBuildChannel?.trim().toLowerCase() || 'release'
+  const isDevBuild = channel === 'dev'
+
+  return {
+    version,
+    channel,
+    isDevBuild,
+    displayVersion: isDevBuild ? `${version} (Dev Build)` : version,
+  }
+}
+
+function splashIconPath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.png')
+    : path.join(__dirname, '../../build/Pulsar.png')
+}
+
+function splashIconUrl(): string {
+  return pathToFileURL(splashIconPath()).toString()
+}
+
+function sendSplash(status: string, progress?: number): void {
+  if (!splashWindow || splashWindow.isDestroyed()) return
+  splashWindow.webContents.send('splash-update', { status, progress })
+}
+
+function createSplashWindow(): void {
+  splashWindow = new BrowserWindow({
+    width: 300,
+    height: 380,
+    frame: false,
+    resizable: false,
+    center: true,
+    show: false,
+    skipTaskbar: true,
+    backgroundColor: '#0f0f14',
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/splash.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+
+  const splashFile = app.isPackaged
+    ? path.join(__dirname, '../renderer/splash.html')
+    : path.join(__dirname, '../../src/renderer/public/splash.html')
+
+  splashWindow.loadFile(splashFile)
+
+  splashWindow.once('ready-to-show', () => {
+    if (!splashWindow || splashWindow.isDestroyed()) return
+    splashWindow.show()
+    splashWindow.webContents.send('splash-update', {
+      icon: splashIconUrl(),
+      status: 'Starting...',
+      progress: 0,
+    })
+  })
+
+  splashWindow.on('closed', () => { splashWindow = null })
+}
 
 function createWindow(): void {
   const icon = app.isPackaged
@@ -66,6 +150,7 @@ function createWindow(): void {
 
   mainWindow.once('ready-to-show', () => {
     clearTimeout(showFallback)
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close()
     mainWindow.show()
   })
 
@@ -566,6 +651,7 @@ function configureAutoUpdates(): void {
     const percent = Math.round(progress.percent)
     const mbps = (progress.bytesPerSecond / (1024 * 1024)).toFixed(1)
     sendNonBlockingStatus(`Ready - downloading update... ${percent}% at ${mbps} MB/s`)
+    sendSplash(`Downloading update... ${percent}%`, percent)
   })
 
   autoUpdater.on('update-downloaded', () => {
@@ -574,6 +660,7 @@ function configureAutoUpdates(): void {
     updateInstallScheduled = true
     sendStatus('ready', 'Update downloaded. Restarting Pulsar to install it...')
     sendToast('Update downloaded. Restarting Pulsar…', 'success')
+    sendSplash('Installing update...', 100)
 
     setTimeout(() => {
       try {
@@ -624,6 +711,7 @@ app.whenReady().then(() => {
   logInfo('Pulsar starting up')
   currentSettings = readSettings()
 
+  createSplashWindow()
   createWindow()
 
   mainWindow.once('ready-to-show', async () => {
@@ -709,6 +797,7 @@ ipcMain.handle('choose-directory', async () => {
 })
 
 ipcMain.handle('get-app-version', () => app.getVersion())
+ipcMain.handle('get-app-build-info', () => getAppBuildInfo())
 ipcMain.handle('get-current-status', () => currentStatus)
 ipcMain.handle('get-app-settings', () => currentSettings)
 ipcMain.handle('save-app-settings', (_e, next: AppSettings) => saveSettings(next))
@@ -747,19 +836,29 @@ ipcMain.handle('download-app-update', async () => {
 
   updateDownloadRequested = true
   sendNonBlockingStatus('Ready - downloading app update...')
-  sendToast('Downloading update...', 'info')
+
+  if (!splashWindow || splashWindow.isDestroyed()) createSplashWindow()
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide()
+  splashWindow!.webContents.send('splash-update', {
+    icon: splashIconUrl(),
+    status: 'Downloading update...',
+    progress: 0,
+  })
+
+  const restoreOnError = (err: unknown) => {
+    updateDownloadRequested = false
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close()
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show()
+    logError('Update download failed', err)
+    const message = normalizeUpdateError(err as Error)
+    sendNonBlockingStatus(`Ready - update download failed: ${message}`)
+    sendToast(message, 'error')
+  }
 
   try {
-    void autoUpdater.downloadUpdate().catch((err) => {
-      updateDownloadRequested = false
-      logError('Update download failed', err)
-      const message = normalizeUpdateError(err)
-      sendNonBlockingStatus(`Ready - update download failed: ${message}`)
-      sendToast(message, 'error')
-    })
+    void autoUpdater.downloadUpdate().catch(restoreOnError)
   } catch (err) {
-    updateDownloadRequested = false
-    logError('Failed to start update download', err)
+    restoreOnError(err)
     throw err
   }
 })

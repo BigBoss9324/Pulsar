@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { AppStatus, HistoryItem, AppSettings, AppUpdateInfo } from './types'
+import type { AppStatus, HistoryItem, AppSettings, AppUpdateInfo, AppBuildInfo } from './types'
 import DownloadTab from './components/DownloadTab'
 import DevTab from './components/DevTab'
 import HistoryTab from './components/HistoryTab'
@@ -14,6 +14,7 @@ type RedownloadRequest = { nonce: number; item: HistoryItem } | null
 export default function App() {
   const [status, setStatus] = useState<AppStatus>({ type: 'info', message: 'Initializing...' })
   const [version, setVersion] = useState('')
+  const [buildInfo, setBuildInfo] = useState<AppBuildInfo | null>(null)
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const isDev = import.meta.env.DEV || Boolean(settings?.enableDevMode)
   const [tab, setTab] = useState<Tab>('download')
@@ -37,7 +38,12 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    window.api.getAppVersion().then(setVersion).catch(() => {})
+    window.api.getAppBuildInfo().then((info) => {
+      setBuildInfo(info)
+      setVersion(info.version)
+    }).catch(() => {
+      window.api.getAppVersion().then(setVersion).catch(() => {})
+    })
     window.api.getAppSettings().then(setSettings).catch(() => {})
   }, [])
 
@@ -88,13 +94,14 @@ export default function App() {
       ? `v${updatePrompt.version} Beta`
       : `v${updatePrompt.version}`
     : ''
-  const isDevMode = import.meta.env.DEV
+  const isDevMode = import.meta.env.DEV || Boolean(buildInfo?.isDevBuild)
   const showBetaBadge = !isDevMode && /(?:^|[-.])(beta|alpha|rc)(?:[-.\d]|$)/i.test(version)
+  const displayVersion = buildInfo?.displayVersion ?? version
 
   const copyVersion = useCallback(() => {
-    navigator.clipboard.writeText(version ? `Pulsar v${version}` : 'Pulsar').catch(() => {})
+    navigator.clipboard.writeText(displayVersion ? `Pulsar v${displayVersion}` : 'Pulsar').catch(() => {})
     showToast('Version copied', 'success')
-  }, [showToast, version])
+  }, [displayVersion, showToast])
 
   const checkForUpdates = useCallback(async () => {
     await window.api.checkForUpdates().catch(() => {})
@@ -166,11 +173,11 @@ export default function App() {
             defaultOutputDir={settings.defaultOutputDir}
           />
         )}
-        {tab === 'dev' && <DevTab version={version} status={status} showToast={showToast} />}
+        {tab === 'dev' && <DevTab version={displayVersion} status={status} showToast={showToast} />}
       </main>
 
       <footer className={styles.footer}>
-        <span className={styles.footerText}>Pulsar{version ? ` v${version}` : ''}</span>
+        <span className={styles.footerText}>Pulsar{displayVersion ? ` v${displayVersion}` : ''}</span>
         <span className={styles.footerDivider} aria-hidden="true">&bull;</span>
         <span className={styles.footerText}>Multi-service video and music downloader</span>
         <span className={styles.footerDivider} aria-hidden="true">&bull;</span>
@@ -196,6 +203,7 @@ export default function App() {
         <SettingsModal
           settings={settings}
           version={version}
+          displayVersion={displayVersion}
           onCheckForUpdates={checkForUpdates}
           onCopyVersion={copyVersion}
           onClose={() => setSettingsOpen(false)}

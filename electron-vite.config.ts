@@ -7,6 +7,14 @@ export default defineConfig({
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
+    build: {
+      rollupOptions: {
+        input: {
+          index: 'src/preload/index.ts',
+          splash: 'src/preload/splash.ts',
+        },
+      },
+    },
   },
   renderer: {
     plugins: [react()],
