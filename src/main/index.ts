@@ -530,7 +530,7 @@ function stopActiveDownloadProcess(proc: ChildProcess | null): void {
 function configureAutoUpdates(): void {
   if (!app.isPackaged) return
 
-  autoUpdater.autoDownload = false
+  autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
   autoUpdater.allowPrerelease = currentSettings.allowPrerelease
 
