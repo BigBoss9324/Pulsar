@@ -25,7 +25,7 @@ if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true })
 console.log(`Building stub installer with: ${makensis}`)
 try {
   execFileSync(makensis, [nsi], { stdio: 'inherit' })
-  console.log(`\nDone. Output: release/Pulsar-Setup-Latest.exe`)
+  console.log(`\nDone. Output: release/PulsarSetup.exe`)
 } catch {
   process.exit(1)
 }

@@ -1,6 +1,6 @@
 {
   "name": "pulsar",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Multi-service video & music downloader",
   "author": "Admin",
   "main": "./out/main/index.js",
@@ -15,7 +15,8 @@
     "prepublish-latest": "npm run build",
     "publish-latest": "electron-builder --publish always",
     "prepublish-beta": "npm run build",
-    "publish-beta": "set EP_PRE_RELEASE=true&& electron-builder --publish always"
+    "publish-beta": "set EP_PRE_RELEASE=true&& electron-builder --publish always",
+    "build-stub": "node scripts/build-stub.js"
   },
   "dependencies": {
     "electron-updater": "^6.8.3",

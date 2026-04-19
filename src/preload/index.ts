@@ -60,6 +60,12 @@ export interface AppSettings {
   subtitleMode: 'off' | 'separate' | 'embed'
   subtitleLanguages: string
   duplicateStrategy: 'skip' | 'allow' | 'overwrite'
+  onError: 'continue' | 'pause' | 'wait-3' | 'wait-5' | 'wait-15'
+  discordWebhookUrl: string
+  discordAttachFile: boolean
+  discordStripMetadata: boolean
+  discordIncludeEmbed: boolean
+  discordDeleteAfterSend: boolean
   embedMetadata: boolean
   embedThumbnail: boolean
   autoCheckUpdates: boolean
@@ -142,6 +148,7 @@ const api = {
   getReleases: () => ipcRenderer.invoke('get-releases') as Promise<GithubRelease[]>,
   installVersion: (downloadUrl: string) => ipcRenderer.invoke('install-version', downloadUrl) as Promise<void>,
   readLog: (maxLines?: number) => ipcRenderer.invoke('read-log', maxLines) as Promise<string>,
+  sendDiscordWebhook: (payload: { webhookUrl: string; embed: { title: string; url: string; thumbnail: string; duration: string; formatLabel: string; outputPath: string; fileSize?: number }; attachFile: boolean; stripMetadata: boolean; includeEmbed: boolean; deleteAfterSend: boolean }) => ipcRenderer.invoke('send-discord-webhook', payload) as Promise<{ deleted: boolean }>,
   onStatus: (cb: (d: StatusEvent) => void) => on<StatusEvent>('status', cb),
   onToast: (cb: (d: { message: string; type: 'success' | 'error' | 'info' }) => void) => on('toast', cb),
   onUpdateAvailable: (cb: (d: AppUpdateInfo) => void) => on<AppUpdateInfo>('update-available', cb),

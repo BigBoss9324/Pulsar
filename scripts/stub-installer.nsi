@@ -3,7 +3,7 @@
 !define GITHUB_REPO "Pulsar"
 
 Name "${APP_NAME} Installer"
-OutFile "..\release\Pulsar-Setup-Latest.exe"
+OutFile "..\release\PulsarSetup.exe"
 RequestExecutionLevel admin
 ShowInstDetails show
 

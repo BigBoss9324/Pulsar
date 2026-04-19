@@ -88,7 +88,8 @@ export default function App() {
       ? `v${updatePrompt.version} Beta`
       : `v${updatePrompt.version}`
     : ''
-  const showBetaBadge = isDev || /(?:^|[-.])(beta|alpha|rc)(?:[-.\d]|$)/i.test(version)
+  const isDevMode = import.meta.env.DEV
+  const showBetaBadge = !isDevMode && /(?:^|[-.])(beta|alpha|rc)(?:[-.\d]|$)/i.test(version)
 
   const copyVersion = useCallback(() => {
     navigator.clipboard.writeText(version ? `Pulsar v${version}` : 'Pulsar').catch(() => {})
@@ -139,7 +140,8 @@ export default function App() {
           >
             Settings
           </button>
-          {showBetaBadge && <span className={styles.betaBadge}>{isDev ? 'Beta' : 'Beta'}</span>}
+          {isDevMode && <span className={styles.devBadge}>Development Build</span>}
+          {showBetaBadge && <span className={styles.betaBadge}>Beta</span>}
           <StatusBadge status={status} />
         </div>
       </header>

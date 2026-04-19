@@ -424,6 +424,12 @@ function defaultAppSettings(): AppSettings {
     subtitleMode: 'off',
     subtitleLanguages: 'en.*',
     duplicateStrategy: 'skip',
+    onError: 'continue',
+    discordWebhookUrl: '',
+    discordAttachFile: false,
+    discordStripMetadata: false,
+    discordIncludeEmbed: false,
+    discordDeleteAfterSend: false,
     embedMetadata: true,
     embedThumbnail: true,
     autoCheckUpdates: true,
@@ -865,6 +871,84 @@ function readHistory(): HistoryItem[] {
   try { return JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf-8')) } catch { return [] }
 }
 
+interface DiscordWebhookPayload {
+  webhookUrl: string
+  embed: {
+    title: string
+    url: string
+    thumbnail: string
+    duration: string
+    formatLabel: string
+    outputPath: string
+    fileSize?: number
+  }
+  attachFile: boolean
+  stripMetadata: boolean
+  includeEmbed: boolean
+  deleteAfterSend: boolean
+}
+
+ipcMain.handle('send-discord-webhook', async (_e, payload: DiscordWebhookPayload) => {
+  const { webhookUrl, embed, attachFile, stripMetadata, includeEmbed, deleteAfterSend } = payload
+
+  const embedPayload = includeEmbed ? {
+    title: embed.title,
+    url: embed.url,
+    color: 0x5865f2,
+    thumbnail: embed.thumbnail ? { url: embed.thumbnail } : undefined,
+    fields: [
+      { name: 'Format', value: embed.formatLabel || 'Unknown', inline: true },
+      embed.duration ? { name: 'Duration', value: embed.duration, inline: true } : null,
+      embed.fileSize ? { name: 'File size', value: `${(embed.fileSize / 1024 / 1024).toFixed(1)} MB`, inline: true } : null,
+    ].filter(Boolean),
+    footer: { text: 'Pulsar' },
+    timestamp: new Date().toISOString(),
+  } : null
+
+  const MAX_DISCORD_BYTES = 25 * 1024 * 1024
+  let deleted = false
+  if (attachFile && embed.outputPath && fs.existsSync(embed.outputPath) && fs.statSync(embed.outputPath).size <= MAX_DISCORD_BYTES) {
+    let uploadPath = embed.outputPath
+    let tempPath: string | null = null
+
+    if (stripMetadata && fs.existsSync(FFMPEG_PATH)) {
+      tempPath = path.join(app.getPath('temp'), `pulsar-discord-${Date.now()}${path.extname(embed.outputPath)}`)
+      await new Promise<void>((resolve) => {
+        const proc = require('child_process').spawn(FFMPEG_PATH, [
+          '-i', embed.outputPath, '-map_metadata', '-1', '-c', 'copy', '-y', tempPath!,
+        ])
+        proc.on('close', () => resolve())
+        proc.on('error', () => resolve())
+      })
+      if (fs.existsSync(tempPath)) uploadPath = tempPath
+    }
+
+    try {
+      const fileBuffer = fs.readFileSync(uploadPath)
+      const fileName = path.basename(embed.outputPath)
+      const formData = new FormData()
+      if (embedPayload) formData.append('payload_json', JSON.stringify({ embeds: [embedPayload] }))
+      formData.append('files[0]', new Blob([fileBuffer]), fileName)
+      const res = await fetch(webhookUrl, { method: 'POST', body: formData })
+      if (res.ok && deleteAfterSend && fs.existsSync(embed.outputPath)) {
+        fs.unlinkSync(embed.outputPath)
+        deleted = true
+      }
+    } finally {
+      if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath)
+    }
+  } else {
+    if (embedPayload) {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ embeds: [embedPayload] }),
+      })
+    }
+  }
+  return { deleted }
+})
+
 ipcMain.handle('get-history', () => readHistory())
 ipcMain.handle('clear-history', () => fs.writeFileSync(HISTORY_PATH, '[]'))
 ipcMain.handle('delete-history-item', (_e, id: string) =>
@@ -1057,6 +1141,12 @@ interface AppSettings {
   subtitleMode: 'off' | 'separate' | 'embed'
   subtitleLanguages: string
   duplicateStrategy: 'skip' | 'allow' | 'overwrite'
+  onError: 'continue' | 'pause' | 'wait-3' | 'wait-5' | 'wait-15'
+  discordWebhookUrl: string
+  discordAttachFile: boolean
+  discordStripMetadata: boolean
+  discordIncludeEmbed: boolean
+  discordDeleteAfterSend: boolean
   embedMetadata: boolean
   embedThumbnail: boolean
   autoCheckUpdates: boolean

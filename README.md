@@ -18,10 +18,19 @@ Spotify is not yet supported but I have plans to add it in the future.
 
 ## Getting Started
 
-1. Download the latest Pulsar installer from [GitHub Releases](https://github.com/BigBoss9324/Pulsar/releases/latest).
-2. Run `Pulsar-Setup-x.x.x.exe`.
-3. Open Pulsar after installation.
-4. On first launch, let Pulsar download `yt-dlp` and `ffmpeg` automatically.
+### Option 1 — Always-Latest Installer (Recommended)
+
+Download **[PulsarSetup.exe](https://github.com/BigBoss9324/Pulsar/releases/latest/download/PulsarSetup.exe)** — a small stub installer that automatically downloads and installs the current latest version every time you run it. You never need to update this file.
+
+### Option 2 — Specific Version
+
+Download a specific release from [GitHub Releases](https://github.com/BigBoss9324/Pulsar/releases) and run `Pulsar-Setup-x.x.x.exe`.
+
+---
+
+1. Run the installer.
+2. Open Pulsar after installation.
+3. On first launch, let Pulsar download `yt-dlp` and `ffmpeg` automatically.
 
 ## How To Download
 

@@ -25,6 +25,14 @@ const DUPLICATE_OPTIONS = [
   { id: 'overwrite', label: 'Overwrite existing files when redownloading' },
 ]
 
+const ON_ERROR_OPTIONS = [
+  { id: 'continue', label: 'Continue to next item immediately' },
+  { id: 'wait-3', label: 'Wait 3 seconds before continuing' },
+  { id: 'wait-5', label: 'Wait 5 seconds before continuing' },
+  { id: 'wait-15', label: 'Wait 15 seconds before continuing' },
+  { id: 'pause', label: 'Pause the queue' },
+]
+
 interface Props {
   settings: AppSettings
   version: string
@@ -243,6 +251,19 @@ export default function SettingsModal({ settings, version, onCheckForUpdates, on
             </select>
           </div>
 
+          <div className="flex-col gap-1">
+            <SettingLabel text="On download error" help="Controls what happens when a download fails permanently. Pause stops the queue so you can review the error before continuing." />
+            <select
+              className="select"
+              value={draft.onError}
+              onChange={(e) => setDraft((prev) => ({ ...prev, onError: e.target.value as AppSettings['onError'] }))}
+            >
+              {ON_ERROR_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+
           <ToggleSetting
             title="Embed metadata in downloaded files"
             description="Write title, uploader, and related metadata into finished downloads when supported"
@@ -280,6 +301,63 @@ export default function SettingsModal({ settings, version, onCheckForUpdates, on
             checked={draft.autoOpenFolder}
             onChange={(checked) => setDraft((prev) => ({ ...prev, autoOpenFolder: checked }))}
           />
+        </div>
+
+        <div className={styles.divider} />
+
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <div className={styles.sectionTitle}>Notifications</div>
+              <div className={styles.sectionSubtitle}>Get notified when downloads finish</div>
+            </div>
+          </div>
+
+          <div className="flex-col gap-1">
+            <SettingLabel text="Discord webhook URL" help="Paste a Discord webhook URL to receive a message with the video title, format, and file size each time a download completes. Leave blank to disable." />
+            <input
+              className="input"
+              type="url"
+              placeholder="https://discord.com/api/webhooks/..."
+              value={draft.discordWebhookUrl}
+              onChange={(e) => setDraft((prev) => ({ ...prev, discordWebhookUrl: e.target.value }))}
+            />
+          </div>
+
+          {draft.discordWebhookUrl && (
+            <ToggleSetting
+              title="Show send button for files under 25 MB"
+              description="Adds a Discord button to completed queue items so you can manually upload the file to Discord. Only appears when the file is small enough for Discord to accept."
+              checked={draft.discordAttachFile}
+              onChange={(checked) => setDraft((prev) => ({ ...prev, discordAttachFile: checked }))}
+            >
+              {draft.discordAttachFile && (
+                <>
+                  <ToggleSetting
+                    compact
+                    title="Include details card"
+                    description="Attach a rich embed showing the video title, format, duration, and file size alongside the upload."
+                    checked={draft.discordIncludeEmbed}
+                    onChange={(checked) => setDraft((prev) => ({ ...prev, discordIncludeEmbed: checked }))}
+                  />
+                  <ToggleSetting
+                    compact
+                    title="Delete file after sending"
+                    description="Permanently removes the file from your computer once it has been successfully uploaded to Discord."
+                    checked={draft.discordDeleteAfterSend}
+                    onChange={(checked) => setDraft((prev) => ({ ...prev, discordDeleteAfterSend: checked }))}
+                  />
+                  <ToggleSetting
+                    compact
+                    title="Strip metadata before uploading"
+                    description="Removes embedded title, uploader, and other tags from the file before it is sent to Discord. The copy saved to your disk is not affected."
+                    checked={draft.discordStripMetadata}
+                    onChange={(checked) => setDraft((prev) => ({ ...prev, discordStripMetadata: checked }))}
+                  />
+                </>
+              )}
+            </ToggleSetting>
+          )}
         </div>
 
         <div className={styles.divider} />

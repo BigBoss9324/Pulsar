@@ -108,6 +108,12 @@ export interface AppSettings {
   subtitleMode: 'off' | 'separate' | 'embed'
   subtitleLanguages: string
   duplicateStrategy: 'skip' | 'allow' | 'overwrite'
+  onError: 'continue' | 'pause' | 'wait-3' | 'wait-5' | 'wait-15'
+  discordWebhookUrl: string
+  discordAttachFile: boolean
+  discordStripMetadata: boolean
+  discordIncludeEmbed: boolean
+  discordDeleteAfterSend: boolean
   embedMetadata: boolean
   embedThumbnail: boolean
   autoCheckUpdates: boolean

@@ -58,6 +58,7 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+
 function normalizeDownloadFailure(err: unknown) {
   if (err && typeof err === 'object') {
     const failure = err as {
@@ -300,6 +301,24 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
       await window.api.saveHistoryItem(historyItem)
       setHistoryItems((items) => [historyItem, ...items])
       if (settings.autoOpenFolder) window.api.openFolder(next.outputDir).catch(() => {})
+      if (settings.discordWebhookUrl && !settings.discordAttachFile && settings.discordIncludeEmbed) {
+        window.api.sendDiscordWebhook({
+          webhookUrl: settings.discordWebhookUrl,
+          embed: {
+            title: next.title,
+            url: next.url,
+            thumbnail: next.thumbnail,
+            duration: next.duration,
+            formatLabel: next.formatLabel,
+            outputPath: result.outputPath ?? next.outputDir,
+            fileSize: result.fileSize,
+          },
+          attachFile: false,
+          stripMetadata: false,
+          includeEmbed: true,
+          deleteAfterSend: false,
+        }).catch(() => {})
+      }
       onDownloadComplete()
     } catch (err) {
       if (cancelledByUserRef.current.has(next.id)) {
@@ -310,6 +329,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
         updateQueue((q) => q.map((i) => i.id === next.id ? {
           ...i,
           status: 'error',
+          cancelled: true,
           progress: 0,
           speed: '',
           eta: '',
@@ -356,14 +376,24 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
           showToast(`Retrying "${next.title}"`, 'info')
           await wait(RETRY_DELAY_MS)
         } else {
-          await wait(1000)
+          const onError = settings.onError ?? 'continue'
+          if (onError === 'pause') {
+            queuePausedRef.current = true
+            setQueuePaused(true)
+          } else if (onError === 'wait-3') {
+            await wait(3000)
+          } else if (onError === 'wait-5') {
+            await wait(5000)
+          } else if (onError === 'wait-15') {
+            await wait(15000)
+          }
         }
       }
     } finally {
       processingRef.current = false
       processQueue()
     }
-  }, [onDownloadComplete, settings.autoOpenFolder, showToast, updateQueue])
+  }, [onDownloadComplete, settings.autoOpenFolder, settings.discordWebhookUrl, settings.discordAttachFile, settings.onError, showToast, updateQueue])
 
   useEffect(() => {
     if (!queuePaused && appReady) processQueue()
@@ -419,6 +449,8 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
       const skippedByHistory = queuedDuplicates.length - uniqueItems.length
       showToast(`Skipped ${skippedByHistory} previously downloaded item${skippedByHistory !== 1 ? 's' : ''}`, 'info')
     }
+    queuePausedRef.current = false
+    setQueuePaused(false)
     processQueue()
   }, [historyItems, processQueue, settings.duplicateStrategy, showToast])
 
@@ -565,7 +597,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
   }
 
   function retryAllFailed() {
-    updateQueue((q) => q.map((item) => item.status === 'error' ? {
+    updateQueue((q) => q.map((item) => item.status === 'error' && !item.cancelled ? {
       ...item,
       status: 'pending',
       progress: 0,
@@ -580,7 +612,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
 
   const canFetch = appReady && isValidUrl(url) && !fetching
   const hasCompleted = queue.some((i) => i.status === 'done')
-  const hasFailed = queue.some((i) => i.status === 'error')
+  const hasFailed = queue.some((i) => i.status === 'error' && !i.cancelled)
   const hasActiveContent = !!videoInfo || queue.length > 0 || showPlaylistPicker
   const canToggleQueue = queuePaused || queue.some((i) => i.status === 'pending' || i.status === 'downloading')
 
@@ -764,12 +796,30 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
           <div className="flex items-center gap-2" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 600, fontSize: 13 }}>Queue</span>
             <span className="muted" style={{ fontSize: 12 }}>
-              {queue.filter((i) => i.status === 'done').length}/{queue.length} done
-              {queue.filter((i) => i.status === 'error').length > 0 && (
-                <span style={{ color: 'var(--danger)', marginLeft: 6 }}>
-                  • {queue.filter((i) => i.status === 'error').length} failed
-                </span>
-              )}
+              {(() => {
+                const done = queue.filter((i) => i.status === 'done')
+                const failed = queue.filter((i) => i.status === 'error' && !i.cancelled)
+                const durations = done
+                  .filter((i) => i.lastStartedAt && i.lastFinishedAt)
+                  .map((i) => new Date(i.lastFinishedAt!).getTime() - new Date(i.lastStartedAt!).getTime())
+                const avgMs = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : null
+                const avgLabel = avgMs != null
+                  ? avgMs >= 60000
+                    ? `avg ${Math.round(avgMs / 60000)}m`
+                    : `avg ${Math.round(avgMs / 1000)}s`
+                  : null
+                return (
+                  <>
+                    {done.length}/{queue.length} done
+                    {avgLabel && <span style={{ marginLeft: 6 }}>• {avgLabel}</span>}
+                    {failed.length > 0 && (
+                      <span style={{ color: 'var(--danger)', marginLeft: 6 }}>
+                        • {failed.length} failed
+                      </span>
+                    )}
+                  </>
+                )
+              })()}
             </span>
             {canToggleQueue && (
               <button className="btn btn-ghost btn-sm" onClick={() => void toggleQueuePaused()}>
@@ -862,6 +912,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
                   updateQueue((q) => q.map((i) => i.id === item.id ? {
                     ...i,
                     status: 'pending',
+                    cancelled: false,
                     error: undefined,
                     errorDetails: undefined,
                     progress: 0,
@@ -874,6 +925,11 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
                 onMoveNext={() => updateQueue((q) => moveQueueItemToNext(q, item.id))}
                 onMoveUp={() => updateQueue((q) => moveQueueItem(q, item.id, -1))}
                 onMoveDown={() => updateQueue((q) => moveQueueItem(q, item.id, 1))}
+                discordWebhookUrl={settings.discordAttachFile ? settings.discordWebhookUrl : ''}
+                discordStripMetadata={settings.discordStripMetadata}
+                discordIncludeEmbed={settings.discordIncludeEmbed}
+                discordDeleteAfterSend={settings.discordDeleteAfterSend}
+                onDiscordFileDeleted={() => updateQueue((q) => q.map((i) => i.id === item.id ? { ...i, outputPath: undefined } : i))}
               />
             ))}
           </div>
@@ -903,7 +959,9 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
   )
 }
 
-function QueueRow({ item, onRemove, onCancel, onOpenFolder, onReveal, onRetry, onMoveNext, onMoveUp, onMoveDown }: {
+const DISCORD_MAX_BYTES = 25 * 1024 * 1024
+
+function QueueRow({ item, onRemove, onCancel, onOpenFolder, onReveal, onRetry, onMoveNext, onMoveUp, onMoveDown, discordWebhookUrl, discordStripMetadata, discordIncludeEmbed, discordDeleteAfterSend, onDiscordFileDeleted }: {
   item: QueueItem
   onRemove: () => void
   onCancel: () => void
@@ -913,12 +971,22 @@ function QueueRow({ item, onRemove, onCancel, onOpenFolder, onReveal, onRetry, o
   onMoveNext: () => void
   onMoveUp: () => void
   onMoveDown: () => void
+  discordWebhookUrl: string
+  discordStripMetadata: boolean
+  discordIncludeEmbed: boolean
+  discordDeleteAfterSend: boolean
+  onDiscordFileDeleted: () => void
 }) {
   const [cancelling, setCancelling] = useState(false)
+  const [sendingToDiscord, setSendingToDiscord] = useState(false)
+
+  useEffect(() => {
+    if (item.status === 'downloading') setCancelling(false)
+  }, [item.status])
 
   const dotClass =
     item.status === 'done' ? styles.statusDone
-    : item.status === 'error' ? styles.statusError
+    : item.status === 'error' && !item.cancelled ? styles.statusError
     : item.status === 'downloading' ? styles.statusActive
     : styles.statusPending
 
@@ -928,7 +996,7 @@ function QueueRow({ item, onRemove, onCancel, onOpenFolder, onReveal, onRetry, o
     .join(' • ')
   const extraSummary = [
     item.status === 'downloading' ? transferSummary : '',
-    item.status === 'error' && item.resumable !== false ? 'Resume supported' : '',
+    item.status === 'error' && !item.cancelled && item.resumable !== false ? 'Resume supported' : '',
   ].filter(Boolean).join(' • ')
 
   return (
@@ -979,6 +1047,38 @@ function QueueRow({ item, onRemove, onCancel, onOpenFolder, onReveal, onRetry, o
         {item.status !== 'downloading' && <button className="btn btn-ghost btn-sm" onClick={onMoveDown} title="Move down"><ArrowDownIcon />Down</button>}
         {item.status === 'done' && <button className="btn btn-ghost btn-sm" onClick={onOpenFolder} title="Open folder"><FolderIcon />Open</button>}
         {item.status === 'done' && item.outputPath && <button className="btn btn-ghost btn-sm" onClick={onReveal} title="Reveal file"><FileIcon />Reveal</button>}
+        {item.status === 'done' && item.outputPath && discordWebhookUrl && (item.fileSize ?? 0) <= DISCORD_MAX_BYTES && (
+          <button
+            className="btn btn-ghost btn-sm"
+            disabled={sendingToDiscord}
+            title="Send to Discord"
+            onClick={async () => {
+              setSendingToDiscord(true)
+              try {
+                await window.api.sendDiscordWebhook({
+                  webhookUrl: discordWebhookUrl,
+                  embed: {
+                    title: item.title,
+                    url: item.url,
+                    thumbnail: item.thumbnail,
+                    duration: item.duration,
+                    formatLabel: item.formatLabel,
+                    outputPath: item.outputPath!,
+                    fileSize: item.fileSize,
+                  },
+                  attachFile: true,
+                  stripMetadata: discordStripMetadata,
+                  includeEmbed: discordIncludeEmbed,
+                  deleteAfterSend: discordDeleteAfterSend,
+                }).then(({ deleted }) => { if (deleted) onDiscordFileDeleted() })
+              } finally {
+                setSendingToDiscord(false)
+              }
+            }}
+          >
+            <DiscordIcon />{sendingToDiscord ? 'Sending...' : 'Discord'}
+          </button>
+        )}
         {item.status === 'error' && <button className="btn btn-ghost btn-sm" onClick={onRetry} title="Retry"><RetryIcon />Retry</button>}
         {(item.status === 'pending' || item.status === 'done' || item.status === 'error') && (
           <button className="btn btn-ghost btn-sm" onClick={onRemove} title="Remove"><TrashIcon />Remove</button>
@@ -1086,6 +1186,14 @@ function CloseIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
       <path d="M3.5 3.5 8.5 8.5M8.5 3.5 3.5 8.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function DiscordIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
     </svg>
   )
 }
