@@ -62,7 +62,7 @@
     ],
     "extraMetadata": {
       "main": "out/main/index.js",
-      "pulsarBuildChannel": "dev"
+      "pulsarBuildChannel": "release"
     },
     "extraResources": [
       {
