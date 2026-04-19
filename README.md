@@ -1,95 +1,102 @@
-# Pulsar<img width="125" height="125" alt="Pulsar" src="https://github.com/user-attachments/assets/10218e63-c634-44cf-80ee-11190953ac2f" />
+# Pulsar
+<img width="125" height="125" alt="Pulsar" src="https://github.com/user-attachments/assets/10218e63-c634-44cf-80ee-11190953ac2f" />
 
+Pulsar is a Windows desktop app for downloading video and audio from many sites supported by `yt-dlp`, including platforms such as YouTube, TikTok, Instagram, Shorts, and playlist-based sources.
 
-Welcome to the first release of Pulsar.
+It is designed for people who want a simple desktop experience instead of managing command-line download tools directly. Pulsar gives you a queue, format selection, download history, version management, and update support in a single app.
 
-Pulsar is a Windows app for downloading video and audio from many supported sites. You can paste links from services like YouTube, TikTok, Instagram, playlists, Shorts, and many other sources supported by `yt-dlp`.
-Spotify is not yet supported but I have plans to add it in the future.
+## What Pulsar Does
+<img width="920" height="700" alt="Pulsar app screenshot" src="https://github.com/user-attachments/assets/84e2422f-283e-4161-8f6b-fe0fe2f70985" />
 
-## What You Can Do
-<img width="920" height="700" alt="image" src="https://github.com/user-attachments/assets/84e2422f-283e-4161-8f6b-fe0fe2f70985" />
+With Pulsar, you can:
 
-- Download video as MP4
-- Download audio as MP3, M4A, Opus, or WAV
-- Build a queue with multiple downloads
-- Pick individual items from playlists
-- Keep a saved download history
-- Install newer or older app versions from inside Settings
+- download video as MP4
+- download audio as MP3, M4A, Opus, or WAV
+- fetch playlist links and choose specific items
+- queue multiple downloads and let them finish in order
+- keep a saved history of completed downloads
+- manage app versions from inside the app
 
-## Getting Started
+## Why Use It
 
-### Option 1 — Always-Latest Installer (Recommended)
+Pulsar is meant to make powerful media downloading tools easier to use for everyday Windows users.
 
-Download **[PulsarSetup.exe](https://github.com/BigBoss9324/Pulsar/releases/latest/download/PulsarSetup.exe)** — a small stub installer that automatically downloads and installs the current latest version every time you run it. You never need to update this file.
+Instead of manually installing supporting tools or remembering terminal commands, you can:
 
-### Option 2 — Specific Version
+- paste a link
+- choose a format
+- select a save folder
+- start the download
 
-Download a specific release from [GitHub Releases](https://github.com/BigBoss9324/Pulsar/releases) and run `Pulsar-Setup-x.x.x.exe`.
+On first launch, Pulsar automatically downloads the tools it needs, including `yt-dlp` and `ffmpeg`.
 
----
+## Download And Install
 
-1. Run the installer.
-2. Open Pulsar after installation.
-3. On first launch, let Pulsar download `yt-dlp` and `ffmpeg` automatically.
+### Always-latest installer
 
-## How To Download
+Download **[PulsarSetup.exe](https://github.com/BigBoss9324/Pulsar/releases/latest/download/PulsarSetup.exe)** if you want a small installer that always downloads the newest public version of Pulsar when you run it.
+
+This is the easiest option for most people.
+
+### Specific version
+
+If you want a particular release, open the [GitHub Releases](https://github.com/BigBoss9324/Pulsar/releases) page and download the versioned installer for that release, such as `PulsarSetup-1.2.0.exe`.
+
+## How To Use Pulsar
 
 1. Paste a supported video, audio, or playlist link into the main input box.
 2. Click `Fetch`.
 3. Choose the format you want.
-4. Confirm the save folder if needed.
-5. Start the download or add it to your queue.
+4. Confirm the output folder if needed.
+5. Start the download or add it to the queue.
 
-By default, Pulsar saves to your Windows Downloads folder until you change it in Settings.
+By default, Pulsar saves downloads to your Windows `Downloads` folder until you change that in Settings.
 
-## Playlists And Queue
+## Playlists, Queue, And History
 
-- If a playlist is detected, you can choose specific items or download the full list
-- You can queue multiple downloads and let them finish in order
-- Completed downloads appear in History so you can reopen the folder or redownload later
+Pulsar is built for more than one-off downloads.
 
-## Updates And Versions
+- Playlist links can be expanded so you can download selected items or the full list.
+- The queue lets you line up multiple downloads and process them in order.
+- Completed items are stored in History so you can reopen the folder, inspect the result, or redownload later.
 
-Pulsar can check for app updates automatically.
+## Updates And Version Management
 
-When a new version is available:
+Pulsar can automatically check for app updates.
 
-- Pulsar asks before updating
-- The update window shows the version number
-- It tells you whether the release is `Stable` or `Pre-release / Beta`
+When a new version is available, the app can:
 
-If you accept the update, Pulsar downloads it and restarts automatically when it is ready.
+- show that an update exists
+- tell you whether it is stable or pre-release
+- download the update
+- restart into the updated version
 
-From `Settings > Version`, you can also:
+From the app's version management area, you can also browse releases and install a newer or older version directly. This makes it easier to stay on a stable release, try a beta, or roll back if needed.
 
-- browse release notes
-- see the current installed version
-- install a newer version
-- install an older version
+## Settings And Behavior
 
-This means you can stay on a stable version, try a beta, or go back to an older release if you prefer its features or behavior.
+Pulsar includes settings for common day-to-day preferences, including:
 
-## Settings
+- default save folder
+- default format
+- subtitle handling
+- duplicate handling
+- behavior after download errors
+- automatic update checks
+- pre-release update opt-in
+- automatically opening the output folder after a download finishes
 
-Inside Settings you can:
-
-- change the default save folder
-- choose a default format
-- change the maximum history size
-- turn automatic update checks on or off
-- allow pre-release updates
-- open the download folder automatically when a download finishes
-- enable developer mode
+For new installs, Pulsar now waits 3 seconds before continuing after a download error by default.
 
 ## Requirements
 
 - Windows x64
-- Internet connection for first launch setup
-- Internet connection for update checks, release notes, and release browsing
+- Internet connection for first-launch setup
+- Internet connection for update checks, release browsing, and version installs
 
 ## App Data
 
-Pulsar stores its app data in its AppData folder on Windows.
+Pulsar stores its working files in its Windows app data directory.
 
 Important files include:
 
@@ -97,9 +104,17 @@ Important files include:
 | --- | --- |
 | `settings.json` | Saved app settings |
 | `history.json` | Download history |
-| `queue.json` | Saved queue |
+| `queue.json` | Saved queue state |
 | `pulsar.log` | App log file |
 | `yt-dlp.exe` | Download engine |
 | `ffmpeg.exe` | Media processing tool |
 
-If needed, Pulsar also includes a `Wipe data & uninstall` option to clear app data before uninstalling. This is located in the dev menu
+## Current Limitations
+
+- Pulsar currently targets Windows x64.
+- Site support depends on what `yt-dlp` supports.
+- Spotify is not currently supported.
+
+## Legal And Usage Note
+
+Pulsar uses third-party tools such as `yt-dlp` and `ffmpeg`. You are responsible for making sure your usage complies with the terms of service, copyright rules, and local laws that apply to the content you download.
