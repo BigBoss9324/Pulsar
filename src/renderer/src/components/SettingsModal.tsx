@@ -79,10 +79,15 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
   const [releasesError, setReleasesError] = useState<string | null>(null)
   const [installingTag, setInstallingTag] = useState<string | null>(null)
   const [expandedReleaseTag, setExpandedReleaseTag] = useState<string | null>(null)
+  const [ytdlpCurrent, setYtdlpCurrent] = useState<string | null>(null)
+  const [ytdlpLatest, setYtdlpLatest] = useState<string | null>(null)
+  const [ytdlpChecking, setYtdlpChecking] = useState(false)
+  const [ytdlpUpdating, setYtdlpUpdating] = useState(false)
 
   useEffect(() => {
     document.body.style.overflow = 'hidden'
     loadReleases()
+    window.api.getYtdlpVersion().then(setYtdlpCurrent).catch(() => {})
     return () => { document.body.style.overflow = '' }
   }, [])
 
@@ -114,6 +119,32 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
       await window.api.installVersion(asset.browser_download_url)
     } catch {
       setInstallingTag(null)
+    }
+  }
+
+  async function handleCheckYtdlpUpdate() {
+    setYtdlpChecking(true)
+    try {
+      const result = await window.api.checkYtdlpUpdate()
+      setYtdlpCurrent(result.current)
+      setYtdlpLatest(result.latest)
+    } catch {
+      setYtdlpLatest(null)
+    } finally {
+      setYtdlpChecking(false)
+    }
+  }
+
+  async function handleUpdateYtdlp() {
+    setYtdlpUpdating(true)
+    try {
+      const newVersion = await window.api.updateYtdlp()
+      setYtdlpCurrent(newVersion)
+      setYtdlpLatest(null)
+    } catch (err) {
+      alert(`yt-dlp update failed: ${(err as Error).message}`)
+    } finally {
+      setYtdlpUpdating(false)
     }
   }
 
@@ -403,6 +434,50 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
           <span className="muted" style={{ fontSize: 12 }}>
             {displayVersion ? `Installed version: v${displayVersion}` : 'Installed version unavailable'}
           </span>
+        </div>
+
+        <div className={styles.divider} />
+
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <div className={styles.sectionTitle}>Downloader</div>
+              <div className={styles.sectionSubtitle}>yt-dlp version and updates</div>
+            </div>
+          </div>
+
+          <div className={styles.ytdlpRow}>
+            <div className={styles.ytdlpInfo}>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>yt-dlp</span>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {ytdlpCurrent ? `Installed: ${ytdlpCurrent}` : 'Version unavailable'}
+              </span>
+              {ytdlpLatest && ytdlpLatest > (ytdlpCurrent ?? '') && (
+                <span style={{ fontSize: 12, color: 'var(--accent)' }}>Update available: {ytdlpLatest}</span>
+              )}
+              {ytdlpLatest && ytdlpLatest <= (ytdlpCurrent ?? '') && (
+                <span style={{ fontSize: 12, color: 'var(--success)' }}>Up to date</span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              {ytdlpLatest && ytdlpLatest > (ytdlpCurrent ?? '') && (
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={ytdlpUpdating}
+                  onClick={() => void handleUpdateYtdlp()}
+                >
+                  {ytdlpUpdating ? 'Updating…' : `Update to ${ytdlpLatest}`}
+                </button>
+              )}
+              <button
+                className="btn btn-secondary btn-sm"
+                disabled={ytdlpChecking || ytdlpUpdating}
+                onClick={() => void handleCheckYtdlpUpdate()}
+              >
+                {ytdlpChecking ? 'Checking…' : 'Check for update'}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className={styles.divider} />

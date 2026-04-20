@@ -326,6 +326,28 @@ interface GithubReleaseSummary {
   assets?: Array<{ name: string; browser_download_url: string; size: number }>
 }
 
+function fetchLatestYtdlpVersion(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    https
+      .get(
+        'https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest',
+        { headers: { 'User-Agent': 'Pulsar-App' } },
+        (res) => {
+          const chunks: Buffer[] = []
+          res.on('data', (chunk: Buffer) => chunks.push(chunk))
+          res.on('end', () => {
+            try {
+              const data = JSON.parse(Buffer.concat(chunks).toString()) as { tag_name?: string }
+              if (!data.tag_name) { reject(new Error('No tag_name in response')); return }
+              resolve(data.tag_name.trim())
+            } catch (err) { reject(err) }
+          })
+        },
+      )
+      .on('error', reject)
+  })
+}
+
 function fetchGithubReleases(): Promise<GithubReleaseSummary[]> {
   return new Promise((resolve, reject) => {
     https
@@ -736,6 +758,12 @@ app.whenReady().then(() => {
       sendStatus('ready', 'Ready')
       logInfo('Setup completed successfully')
       configureAutoUpdates()
+      fetchLatestYtdlpVersion()
+        .then((latest) => runYtDlp(['--version']).then((v) => ({ latest, current: v.trim() })))
+        .then(({ latest, current }) => {
+          if (latest > current) sendToast(`yt-dlp update available: ${latest}`, 'info')
+        })
+        .catch(() => {})
     } catch (err) {
       logError('Setup failed', err)
       sendStatus('error', 'Setup failed: ' + (err as Error).message)
@@ -1299,6 +1327,37 @@ interface PersistedQueueItem {
   outputPath?: string
   fileSize?: number
 }
+
+ipcMain.handle('check-ytdlp-update', async () => {
+  const [current, latest] = await Promise.all([
+    runYtDlp(['--version']).then((v) => v.trim()).catch(() => ''),
+    fetchLatestYtdlpVersion(),
+  ])
+  return { current, latest, hasUpdate: latest > current }
+})
+
+ipcMain.handle('update-ytdlp', async () => {
+  if (activeProc) throw new Error('A download is in progress. Finish or cancel it first.')
+  const latest = await fetchLatestYtdlpVersion()
+  const filename = IS_WIN ? 'yt-dlp.exe' : (process.platform === 'darwin' ? 'yt-dlp_macos' : 'yt-dlp_linux')
+  const url = `https://github.com/yt-dlp/yt-dlp/releases/download/${latest}/${filename}`
+  const tmpPath = `${YTDLP_PATH}.new`
+  const oldPath = `${YTDLP_PATH}.old`
+  try {
+    await downloadFile(url, tmpPath)
+    if (!IS_WIN) fs.chmodSync(tmpPath, 0o755)
+    if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath)
+    if (fs.existsSync(YTDLP_PATH)) fs.renameSync(YTDLP_PATH, oldPath)
+    fs.renameSync(tmpPath, YTDLP_PATH)
+    if (fs.existsSync(oldPath)) try { fs.unlinkSync(oldPath) } catch { /* ignore */ }
+  } catch (err) {
+    if (fs.existsSync(tmpPath)) try { fs.unlinkSync(tmpPath) } catch { /* ignore */ }
+    logError('Failed to update yt-dlp', err)
+    throw err
+  }
+  logInfo(`yt-dlp updated to ${latest}`)
+  return latest
+})
 
 ipcMain.handle('export-queue', async (_e, data: string) => {
   const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {

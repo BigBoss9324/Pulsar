@@ -158,6 +158,8 @@ const api = {
   readLog: (maxLines?: number) => ipcRenderer.invoke('read-log', maxLines) as Promise<string>,
   sendDiscordWebhook: (payload: { webhookUrl: string; embed: { title: string; url: string; thumbnail: string; duration: string; formatLabel: string; outputPath: string; fileSize?: number }; attachFile: boolean; stripMetadata: boolean; includeEmbed: boolean; deleteAfterSend: boolean }) => ipcRenderer.invoke('send-discord-webhook', payload) as Promise<{ deleted: boolean }>,
   showNotification: (opts: { title: string; body: string }) => ipcRenderer.invoke('show-notification', opts) as Promise<void>,
+  checkYtdlpUpdate: () => ipcRenderer.invoke('check-ytdlp-update') as Promise<{ current: string; latest: string; hasUpdate: boolean }>,
+  updateYtdlp: () => ipcRenderer.invoke('update-ytdlp') as Promise<string>,
   exportQueue: (data: string) => ipcRenderer.invoke('export-queue', data) as Promise<boolean>,
   importQueue: () => ipcRenderer.invoke('import-queue') as Promise<string | null>,
   onStatus: (cb: (d: StatusEvent) => void) => on<StatusEvent>('status', cb),

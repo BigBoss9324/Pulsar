@@ -167,6 +167,8 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
   const [playlistCount, setPlaylistCount] = useState(0)
 
   const [queue, setQueue] = useState<QueueItem[]>([])
+  const [queueSearch, setQueueSearch] = useState('')
+  const [selectedQueueIds, setSelectedQueueIds] = useState<Set<string>>(new Set())
   const [queuePaused, setQueuePaused] = useState(false)
   const queuePausedRef = useRef(false)
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([])
@@ -658,11 +660,41 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
     processQueue()
   }
 
+  async function bulkRemoveSelected() {
+    const ids = selectedQueueIds
+    const activeItem = queueRef.current.find((i) => i.status === 'downloading' && ids.has(i.id))
+    if (activeItem) {
+      cancelledByUserRef.current.add(activeItem.id)
+      await window.api.cancelDownload(activeItem.id).catch(() => {})
+    }
+    updateQueue((q) => q.filter((i) => !ids.has(i.id)))
+    setSelectedQueueIds(new Set())
+  }
+
+  function bulkRetrySelected() {
+    const ids = selectedQueueIds
+    updateQueue((q) => q.map((i) =>
+      ids.has(i.id) && i.status === 'error' && !i.cancelled
+        ? { ...i, status: 'pending', cancelled: false, error: undefined, errorDetails: undefined, progress: 0, speed: '', eta: '', transferred: '' }
+        : i,
+    ))
+    setSelectedQueueIds(new Set())
+    processQueue()
+  }
+
   const canFetch = appReady && isValidUrl(url) && !fetching
   const hasCompleted = queue.some((i) => i.status === 'done')
   const hasFailed = queue.some((i) => i.status === 'error' && !i.cancelled)
   const hasActiveContent = !!videoInfo || queue.length > 0 || showPlaylistPicker
   const canToggleQueue = queuePaused || queue.some((i) => i.status === 'pending' || i.status === 'downloading')
+
+  const filteredQueue = queueSearch.trim()
+    ? queue.filter((i) => i.title.toLowerCase().includes(queueSearch.toLowerCase()) || i.url.toLowerCase().includes(queueSearch.toLowerCase()))
+    : queue
+  const selectableIds = filteredQueue.filter((i) => i.status !== 'downloading').map((i) => i.id)
+  const allFilteredSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedQueueIds.has(id))
+  const selectedInView = filteredQueue.filter((i) => selectedQueueIds.has(i.id))
+  const selectedFailedCount = selectedInView.filter((i) => i.status === 'error' && !i.cancelled).length
 
   return (
     <div className={styles.root}>
@@ -888,25 +920,54 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
               </button>
             )}
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => void handleImportQueue()}>
-                Import
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => void handleExportQueue()}>
-                Export
-              </button>
-              <button
-                className="btn btn-danger btn-sm"
-                onClick={() => setConfirmClearQueue(true)}
-              >
-                Clear queue
-              </button>
-              {hasCompleted && (
-                <button className="btn btn-ghost btn-sm" onClick={clearCompleted}>
-                  Clear completed
-                </button>
-              )}
+              <button className="btn btn-ghost btn-sm" onClick={() => void handleImportQueue()}>Import</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => void handleExportQueue()}>Export</button>
+              <button className="btn btn-danger btn-sm" onClick={() => setConfirmClearQueue(true)}>Clear queue</button>
+              {hasCompleted && <button className="btn btn-ghost btn-sm" onClick={clearCompleted}>Clear completed</button>}
             </div>
           </div>
+
+          <div className={`${styles.queueToolbar}`}>
+            <input
+              className={`input ${styles.queueSearch}`}
+              type="text"
+              placeholder="Filter queue..."
+              value={queueSearch}
+              onChange={(e) => setQueueSearch(e.target.value)}
+            />
+            {selectableIds.length > 0 && (
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ flexShrink: 0 }}
+                onClick={() => {
+                  if (allFilteredSelected) {
+                    setSelectedQueueIds((s) => { const n = new Set(s); selectableIds.forEach((id) => n.delete(id)); return n })
+                  } else {
+                    setSelectedQueueIds((s) => { const n = new Set(s); selectableIds.forEach((id) => n.add(id)); return n })
+                  }
+                }}
+              >
+                {allFilteredSelected ? 'Deselect all' : 'Select all'}
+              </button>
+            )}
+          </div>
+
+          {selectedQueueIds.size > 0 && (
+            <div className={styles.bulkBar}>
+              <span className={styles.bulkCount}>{selectedQueueIds.size} selected</span>
+              {selectedFailedCount > 0 && (
+                <button className="btn btn-secondary btn-sm" onClick={bulkRetrySelected}>
+                  Retry {selectedFailedCount} failed
+                </button>
+              )}
+              <button className="btn btn-danger btn-sm" onClick={() => void bulkRemoveSelected()}>
+                Remove {selectedQueueIds.size}
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setSelectedQueueIds(new Set())}>
+                Deselect
+              </button>
+            </div>
+          )}
           {(() => {
             const active = queue.find((i) => i.status === 'downloading')
             const nextPending = queue.find((i) => i.status === 'pending')
@@ -966,10 +1027,15 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
           })()}
 
           <div className={styles.queueList}>
-            {queue.map((item) => (
+            {filteredQueue.length === 0 && queueSearch.trim() && (
+              <div className="muted" style={{ fontSize: 12, padding: '8px 0' }}>No items match your filter.</div>
+            )}
+            {filteredQueue.map((item) => (
                 <QueueRow
                   key={item.id}
                   item={item}
+                  selected={selectedQueueIds.has(item.id)}
+                  onToggleSelect={item.status !== 'downloading' ? () => setSelectedQueueIds((s) => { const n = new Set(s); n.has(item.id) ? n.delete(item.id) : n.add(item.id); return n }) : undefined}
                   onRemove={() => removeQueueItem(item.id)}
                   onCancel={async () => {
                     cancelledKeepInQueueRef.current.add(item.id)
@@ -1030,8 +1096,10 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
 
 const DISCORD_MAX_BYTES = 25 * 1024 * 1024
 
-function QueueRow({ item, onRemove, onCancel, onOpenFolder, onReveal, onRetry, onMoveNext, onMoveUp, onMoveDown, discordWebhookUrl, discordStripMetadata, discordIncludeEmbed, discordDeleteAfterSend, onDiscordFileDeleted }: {
+function QueueRow({ item, selected, onToggleSelect, onRemove, onCancel, onOpenFolder, onReveal, onRetry, onMoveNext, onMoveUp, onMoveDown, discordWebhookUrl, discordStripMetadata, discordIncludeEmbed, discordDeleteAfterSend, onDiscordFileDeleted }: {
   item: QueueItem
+  selected?: boolean
+  onToggleSelect?: () => void
   onRemove: () => void
   onCancel: () => void
   onOpenFolder: () => void
@@ -1069,7 +1137,16 @@ function QueueRow({ item, onRemove, onCancel, onOpenFolder, onReveal, onRetry, o
   ].filter(Boolean).join(' • ')
 
   return (
-    <div className={styles.queueRow}>
+    <div className={`${styles.queueRow} ${selected ? styles.queueRowSelected : ''}`}>
+      {onToggleSelect && (
+        <input
+          type="checkbox"
+          className={styles.queueCheckbox}
+          checked={selected ?? false}
+          onChange={onToggleSelect}
+          aria-label={`Select ${item.title}`}
+        />
+      )}
       <Thumb src={item.thumbnail} className={styles.queueThumb} />
       <div className={styles.queueMeta}>
         <div className={styles.queueTitle} title={item.title}>{item.title}</div>
