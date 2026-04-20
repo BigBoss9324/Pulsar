@@ -9,7 +9,7 @@ import './index.css'
 import { renderReleaseNotes } from './utils/renderReleaseNotes'
 
 type Tab = 'download' | 'history' | 'dev'
-type RedownloadRequest = { nonce: number; item: HistoryItem } | null
+type RedownloadRequest = { nonce: number; items: HistoryItem[] } | null
 
 export default function App() {
   const [status, setStatus] = useState<AppStatus>({ type: 'info', message: 'Initializing...' })
@@ -62,10 +62,10 @@ export default function App() {
     setHistoryKey((k) => k + 1)
   }, [])
 
-  const handleRedownload = useCallback((item: HistoryItem) => {
+  const handleRedownload = useCallback((items: HistoryItem[]) => {
     setTab('download')
-    setRedownloadRequest({ nonce: Date.now(), item })
-    showToast('Added to queue from history', 'success')
+    setRedownloadRequest({ nonce: Date.now(), items })
+    showToast(items.length === 1 ? 'Added to queue from history' : `Added ${items.length} items to queue`, 'success')
   }, [showToast])
 
   const saveSettings = useCallback(async (next: AppSettings) => {

@@ -6,7 +6,7 @@ import styles from './HistoryTab.module.css'
 
 interface Props {
   showToast: (msg: string, type: string) => void
-  onRedownload: (item: HistoryItem) => void
+  onRedownload: (items: HistoryItem[]) => void
   defaultOutputDir: string
 }
 
@@ -35,6 +35,7 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
   const [items, setItems] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirmClearOpen, setConfirmClearOpen] = useState(false)
 
   useEffect(() => {
@@ -44,13 +45,23 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
   async function handleDelete(id: string) {
     await window.api.deleteHistoryItem(id)
     setItems((h) => h.filter((i) => i.id !== id))
+    setSelected((s) => { const next = new Set(s); next.delete(id); return next })
   }
 
   async function handleClearAll() {
     await window.api.clearHistory()
     setItems([])
+    setSelected(new Set())
     setConfirmClearOpen(false)
     showToast('History cleared', '')
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((s) => {
+      const next = new Set(s)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
   }
 
   const filtered = search.trim()
@@ -58,6 +69,26 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
       [item.title, item.url, item.formatLabel].some((value) => value.toLowerCase().includes(search.toLowerCase())),
     )
     : items
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every((i) => selected.has(i.id))
+
+  function toggleSelectAll() {
+    if (allFilteredSelected) {
+      setSelected((s) => {
+        const next = new Set(s)
+        filtered.forEach((i) => next.delete(i.id))
+        return next
+      })
+    } else {
+      setSelected((s) => {
+        const next = new Set(s)
+        filtered.forEach((i) => next.add(i.id))
+        return next
+      })
+    }
+  }
+
+  const selectedItems = items.filter((i) => selected.has(i.id))
 
   if (loading) {
     return <div className={styles.empty}>Loading...</div>
@@ -77,6 +108,15 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
     <div className={styles.root}>
       <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
         <span style={{ fontWeight: 600, fontSize: 13 }}>{items.length} download{items.length !== 1 ? 's' : ''}</span>
+        {selected.size > 0 && (
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => { onRedownload(selectedItems); setSelected(new Set()) }}
+          >
+            <QueueIcon />
+            Add {selected.size} to queue
+          </button>
+        )}
         {defaultOutputDir && (
           <button className="btn btn-ghost btn-sm" onClick={() => window.api.openFolder(defaultOutputDir)}>
             Open default folder
@@ -87,49 +127,70 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
         </button>
       </div>
 
-      <input
-        className="input"
-        type="text"
-        placeholder="Search history..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
+      <div className="flex gap-2 items-center">
+        <input
+          className="input"
+          type="text"
+          placeholder="Search history..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ flex: 1 }}
+        />
+        {filtered.length > 0 && (
+          <button className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }} onClick={toggleSelectAll}>
+            {allFilteredSelected ? 'Deselect all' : 'Select all'}
+          </button>
+        )}
+      </div>
 
       <div className={styles.list}>
-        {filtered.map((item) => (
-          <div key={item.id} className={styles.row}>
-            <Thumb src={item.thumbnail} className={styles.thumb} />
-            <div className={styles.meta}>
-              <div className={styles.title} title={item.title}>{item.title}</div>
-              <div className="flex gap-2 items-center" style={{ marginTop: 3, flexWrap: 'wrap' }}>
-                <span className={styles.formatBadge}>{item.formatLabel}</span>
-                {item.duration && <span className="muted" style={{ fontSize: 11 }}>{item.duration}</span>}
-                {item.fileSize && <span className="muted" style={{ fontSize: 11 }}>{formatBytes(item.fileSize)}</span>}
-                <span className="faint" style={{ fontSize: 11 }}>{formatDate(item.completedAt)}</span>
+        {filtered.map((item) => {
+          const isSelected = selected.has(item.id)
+          return (
+            <div
+              key={item.id}
+              className={`${styles.row} ${isSelected ? styles.rowSelected : ''}`}
+            >
+              <input
+                type="checkbox"
+                className={styles.checkbox}
+                checked={isSelected}
+                onChange={() => toggleSelect(item.id)}
+                aria-label={`Select ${item.title}`}
+              />
+              <Thumb src={item.thumbnail} className={styles.thumb} />
+              <div className={styles.meta}>
+                <div className={styles.title} title={item.title}>{item.title}</div>
+                <div className="flex gap-2 items-center" style={{ marginTop: 3, flexWrap: 'wrap' }}>
+                  <span className={styles.formatBadge}>{item.formatLabel}</span>
+                  {item.duration && <span className="muted" style={{ fontSize: 11 }}>{item.duration}</span>}
+                  {item.fileSize && <span className="muted" style={{ fontSize: 11 }}>{formatBytes(item.fileSize)}</span>}
+                  <span className="faint" style={{ fontSize: 11 }}>{formatDate(item.completedAt)}</span>
+                </div>
+              </div>
+              <div className={styles.actions}>
+                <button className="btn btn-secondary btn-sm" title="Add to queue again" onClick={() => onRedownload([item])}>
+                  <QueueIcon />
+                  Redownload
+                </button>
+                <button className="btn btn-ghost btn-sm" title="Open folder" onClick={() => window.api.openFolder(item.outputDir)}>
+                  <FolderIcon />
+                  Open
+                </button>
+                {item.outputPath && (
+                  <button className="btn btn-ghost btn-sm" title="Show file" onClick={() => window.api.revealItem(item.outputPath!)}>
+                    <FileIcon />
+                    Reveal
+                  </button>
+                )}
+                <button className="btn btn-ghost btn-sm" title="Remove from history" onClick={() => handleDelete(item.id)}>
+                  <TrashIcon />
+                  Remove
+                </button>
               </div>
             </div>
-            <div className={styles.actions}>
-              <button className="btn btn-secondary btn-sm" title="Add to queue again" onClick={() => onRedownload(item)}>
-                <QueueIcon />
-                Redownload
-              </button>
-              <button className="btn btn-ghost btn-sm" title="Open folder" onClick={() => window.api.openFolder(item.outputDir)}>
-                <FolderIcon />
-                Open
-              </button>
-              {item.outputPath && (
-                <button className="btn btn-ghost btn-sm" title="Show file" onClick={() => window.api.revealItem(item.outputPath!)}>
-                  <FileIcon />
-                  Reveal
-                </button>
-              )}
-              <button className="btn btn-ghost btn-sm" title="Remove from history" onClick={() => handleDelete(item.id)}>
-                <TrashIcon />
-                Remove
-              </button>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {confirmClearOpen && (

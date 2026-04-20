@@ -12,7 +12,7 @@ const RETRY_DELAY_MS = 2500
 
 interface Props {
   appReady: boolean
-  redownloadRequest: { nonce: number; item: HistoryItem } | null
+  redownloadRequest: { nonce: number; items: HistoryItem[] } | null
   settings: AppSettings
   showToast: (msg: string, type: string) => void
   onDownloadComplete: () => void
@@ -248,8 +248,10 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
     if (!next) {
       if (queueWasActiveRef.current && settings.notifications) {
         queueWasActiveRef.current = false
-        const total = queueRef.current.filter((i) => i.status === 'done' || i.status === 'error').length
-        window.api.showNotification({ title: 'Queue finished', body: `${total} download${total !== 1 ? 's' : ''} completed` }).catch(() => {})
+        if (!document.hasFocus()) {
+          const total = queueRef.current.filter((i) => i.status === 'done' || i.status === 'error').length
+          window.api.showNotification({ title: 'Queue finished', body: `${total} download${total !== 1 ? 's' : ''} completed` }).catch(() => {})
+        }
       }
       return
     }
@@ -385,7 +387,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
           showToast(`Retrying "${next.title}"`, 'info')
           await wait(RETRY_DELAY_MS)
         } else {
-          if (settings.notifications && !failure.cancelled) window.api.showNotification({ title: 'Download failed', body: next.title }).catch(() => {})
+          if (settings.notifications && !failure.cancelled && !document.hasFocus()) window.api.showNotification({ title: 'Download failed', body: next.title }).catch(() => {})
           const onError = settings.onError ?? 'continue'
           if (onError === 'pause') {
             queuePausedRef.current = true
@@ -468,9 +470,9 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
     if (!redownloadRequest || redownloadRequest.nonce === lastRedownloadNonceRef.current) return
 
     lastRedownloadNonceRef.current = redownloadRequest.nonce
-    const { item } = redownloadRequest
-    setOutputDir(item.outputDir)
-    addToQueue([{
+    const { items } = redownloadRequest
+    if (items.length === 1) setOutputDir(items[0].outputDir)
+    addToQueue(items.map((item) => ({
       url: item.url,
       title: item.title,
       thumbnail: item.thumbnail,
@@ -480,8 +482,8 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
       outputDir: item.outputDir,
       filename: '',
       downloadPrefs: buildDownloadPrefs(settings),
-      downloader: 'ytdlp',
-    }])
+      downloader: 'ytdlp' as const,
+    })))
   }, [addToQueue, redownloadRequest, settings])
 
   async function handleFetch() {

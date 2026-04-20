@@ -1302,7 +1302,6 @@ interface PersistedQueueItem {
 
 ipcMain.handle('show-notification', (_e, { title, body }: { title: string; body: string }) => {
   if (!Notification.isSupported()) return
-  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) return
   new Notification({ title, body, silent: false }).show()
 })
 
