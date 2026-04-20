@@ -929,6 +929,24 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
           </div>
 
           <div className={`${styles.queueToolbar}`}>
+            {selectableIds.length > 0 && (
+              <label className={styles.queueSelectAll}>
+                <input
+                  type="checkbox"
+                  className={styles.queueCheckbox}
+                  checked={allFilteredSelected}
+                  onChange={() => {
+                    if (allFilteredSelected) {
+                      setSelectedQueueIds((s) => { const n = new Set(s); selectableIds.forEach((id) => n.delete(id)); return n })
+                    } else {
+                      setSelectedQueueIds((s) => { const n = new Set(s); selectableIds.forEach((id) => n.add(id)); return n })
+                    }
+                  }}
+                  aria-label={allFilteredSelected ? 'Deselect all queue items' : 'Select all queue items'}
+                  title={allFilteredSelected ? 'Deselect all' : 'Select all'}
+                />
+              </label>
+            )}
             <input
               className={`input ${styles.queueSearch}`}
               type="text"
@@ -936,21 +954,6 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
               value={queueSearch}
               onChange={(e) => setQueueSearch(e.target.value)}
             />
-            {selectableIds.length > 0 && (
-              <button
-                className="btn btn-ghost btn-sm"
-                style={{ flexShrink: 0 }}
-                onClick={() => {
-                  if (allFilteredSelected) {
-                    setSelectedQueueIds((s) => { const n = new Set(s); selectableIds.forEach((id) => n.delete(id)); return n })
-                  } else {
-                    setSelectedQueueIds((s) => { const n = new Set(s); selectableIds.forEach((id) => n.add(id)); return n })
-                  }
-                }}
-              >
-                {allFilteredSelected ? 'Deselect all' : 'Select all'}
-              </button>
-            )}
           </div>
 
           {selectedQueueIds.size > 0 && (

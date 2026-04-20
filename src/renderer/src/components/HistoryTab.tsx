@@ -127,7 +127,19 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
         </button>
       </div>
 
-      <div className="flex gap-2 items-center">
+      <div className={styles.toolbar}>
+        {filtered.length > 0 && (
+          <label className={styles.selectAll}>
+            <input
+              type="checkbox"
+              className={styles.checkbox}
+              checked={allFilteredSelected}
+              onChange={toggleSelectAll}
+              aria-label={allFilteredSelected ? 'Deselect all history items' : 'Select all history items'}
+              title={allFilteredSelected ? 'Deselect all' : 'Select all'}
+            />
+          </label>
+        )}
         <input
           className="input"
           type="text"
@@ -136,11 +148,6 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
           onChange={(e) => setSearch(e.target.value)}
           style={{ flex: 1 }}
         />
-        {filtered.length > 0 && (
-          <button className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }} onClick={toggleSelectAll}>
-            {allFilteredSelected ? 'Deselect all' : 'Select all'}
-          </button>
-        )}
       </div>
 
       <div className={styles.list}>
