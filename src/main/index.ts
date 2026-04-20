@@ -1300,6 +1300,37 @@ interface PersistedQueueItem {
   fileSize?: number
 }
 
+ipcMain.handle('export-queue', async (_e, data: string) => {
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export queue',
+    defaultPath: 'pulsar-queue.json',
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  })
+  if (canceled || !filePath) return false
+  try {
+    fs.writeFileSync(filePath, data)
+  } catch (err) {
+    logError('Failed to export queue', err)
+    throw err
+  }
+  return true
+})
+
+ipcMain.handle('import-queue', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    title: 'Import queue',
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+    properties: ['openFile'],
+  })
+  if (canceled || !filePaths[0]) return null
+  try {
+    return fs.readFileSync(filePaths[0], 'utf-8')
+  } catch (err) {
+    logError('Failed to import queue', err)
+    throw err
+  }
+})
+
 ipcMain.handle('show-notification', (_e, { title, body }: { title: string; body: string }) => {
   if (!Notification.isSupported()) return
   new Notification({ title, body, silent: false }).show()

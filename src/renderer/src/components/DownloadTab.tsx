@@ -577,6 +577,42 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
     showToast(`Added ${items.length} video${items.length !== 1 ? 's' : ''} to queue`, 'success')
   }
 
+  async function handleExportQueue() {
+    try {
+      const exportable = queueRef.current
+        .filter((i) => i.status !== 'done')
+        .map(({ url, title, thumbnail, duration, format, formatLabel, outputDir, filename, downloadPrefs, downloader }) => ({
+          url, title, thumbnail, duration, format, formatLabel, outputDir, filename: filename ?? '', downloadPrefs, downloader,
+        }))
+      const ok = await window.api.exportQueue(JSON.stringify(exportable, null, 2))
+      if (ok) showToast('Queue exported', 'success')
+    } catch {
+      showToast('Export failed', 'error')
+    }
+  }
+
+  async function handleImportQueue() {
+    let raw: string | null
+    try {
+      raw = await window.api.importQueue()
+    } catch {
+      showToast('Import failed', 'error')
+      return
+    }
+    if (!raw) return
+    let parsed: unknown
+    try { parsed = JSON.parse(raw) } catch { showToast('Invalid queue file', 'error'); return }
+    if (!Array.isArray(parsed)) { showToast('Invalid queue file', 'error'); return }
+    const valid = (parsed as unknown[]).filter((item): item is QueueDraft =>
+      item !== null && typeof item === 'object' &&
+      typeof (item as Record<string, unknown>).url === 'string' &&
+      typeof (item as Record<string, unknown>).title === 'string' &&
+      (item as Record<string, unknown>).format !== null && typeof (item as Record<string, unknown>).format === 'object',
+    )
+    if (valid.length === 0) { showToast('No valid items found in file', 'error'); return }
+    addToQueue(valid)
+  }
+
   function removeQueueItem(id: string) { updateQueue((q) => q.filter((i) => i.id !== id)) }
   function clearCompleted() { updateQueue((q) => q.filter((i) => i.status !== 'done')) }
   async function clearQueue() {
@@ -728,6 +764,9 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
                 <button className="btn btn-secondary" type="button" onClick={handleBrowse}>
                   {outputDir ? 'Change save folder' : 'Choose save folder'}
                 </button>
+                <button className="btn btn-ghost" type="button" onClick={() => void handleImportQueue()}>
+                  Import queue
+                </button>
               </div>
             </div>
 
@@ -849,6 +888,12 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
               </button>
             )}
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => void handleImportQueue()}>
+                Import
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => void handleExportQueue()}>
+                Export
+              </button>
               <button
                 className="btn btn-danger btn-sm"
                 onClick={() => setConfirmClearQueue(true)}
