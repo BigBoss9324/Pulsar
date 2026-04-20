@@ -79,6 +79,8 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
   const [releasesError, setReleasesError] = useState<string | null>(null)
   const [installingTag, setInstallingTag] = useState<string | null>(null)
   const [expandedReleaseTag, setExpandedReleaseTag] = useState<string | null>(null)
+  const [archiveCount, setArchiveCount] = useState<number | null>(null)
+  const [clearingArchive, setClearingArchive] = useState(false)
   const [ytdlpCurrent, setYtdlpCurrent] = useState<string | null>(null)
   const [ytdlpLatest, setYtdlpLatest] = useState<string | null>(null)
   const [ytdlpChecking, setYtdlpChecking] = useState(false)
@@ -88,6 +90,7 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
     document.body.style.overflow = 'hidden'
     loadReleases()
     window.api.getYtdlpVersion().then(setYtdlpCurrent).catch(() => {})
+    window.api.getArchiveStats().then((s) => setArchiveCount(s.count)).catch(() => {})
     return () => { document.body.style.overflow = '' }
   }, [])
 
@@ -119,6 +122,16 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
       await window.api.installVersion(asset.browser_download_url)
     } catch {
       setInstallingTag(null)
+    }
+  }
+
+  async function handleClearArchive() {
+    setClearingArchive(true)
+    try {
+      await window.api.clearArchive()
+      setArchiveCount(0)
+    } finally {
+      setClearingArchive(false)
     }
   }
 
@@ -283,6 +296,30 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
             </select>
           </div>
 
+          <ToggleSetting
+            title="Use download archive"
+            description="Tracks downloaded video IDs in a file so yt-dlp skips them on re-add, even if you rename files or change folders"
+            checked={draft.useDownloadArchive}
+            onChange={(checked) => setDraft((prev) => ({ ...prev, useDownloadArchive: checked }))}
+          >
+            {draft.useDownloadArchive && (
+              <div className={styles.archiveStats}>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {archiveCount === null ? 'Loading…' : `${archiveCount} ${archiveCount === 1 ? 'entry' : 'entries'} in archive`}
+                </span>
+                {(archiveCount ?? 0) > 0 && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    disabled={clearingArchive}
+                    onClick={() => void handleClearArchive()}
+                  >
+                    {clearingArchive ? 'Clearing…' : 'Clear archive'}
+                  </button>
+                )}
+              </div>
+            )}
+          </ToggleSetting>
+
           <div className="flex-col gap-1">
             <SettingLabel text="On download error" help="Controls what happens when a download fails permanently. Pause stops the queue so you can review the error before continuing." />
             <select
@@ -346,8 +383,8 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
             <div>
-              <div className={styles.sectionTitle}>Notifications</div>
-              <div className={styles.sectionSubtitle}>Get notified when downloads finish</div>
+              <div className={styles.sectionTitle}>Discord</div>
+              <div className={styles.sectionSubtitle}>Send downloads to a Discord channel via webhook</div>
             </div>
           </div>
 

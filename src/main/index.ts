@@ -18,6 +18,7 @@ let HISTORY_PATH: string
 let SETTINGS_PATH: string
 let QUEUE_PATH: string
 let LOG_PATH: string
+let ARCHIVE_PATH: string
 
 let mainWindow: BrowserWindow
 let splashWindow: BrowserWindow | null = null
@@ -548,6 +549,7 @@ function defaultAppSettings(): AppSettings {
     discordDeleteAfterSend: false,
     embedMetadata: true,
     embedThumbnail: true,
+    useDownloadArchive: true,
     autoCheckUpdates: true,
     allowPrerelease: false,
     autoOpenFolder: false,
@@ -624,6 +626,7 @@ function getWipeFileTargets(): string[] {
     SETTINGS_PATH,
     QUEUE_PATH,
     LOG_PATH,
+    ARCHIVE_PATH,
   ]))
 }
 
@@ -740,6 +743,7 @@ app.whenReady().then(() => {
   SETTINGS_PATH = path.join(userData, 'settings.json')
   QUEUE_PATH = path.join(userData, 'queue.json')
   LOG_PATH = path.join(userData, 'pulsar.log')
+  ARCHIVE_PATH = path.join(userData, 'archive.txt')
   logInfo('Pulsar starting up')
   currentSettings = readSettings()
 
@@ -926,11 +930,13 @@ function downloadWithYtdlp({ id, url, format, outputDir, filename, downloadPrefs
     activeDownloadId = id
     let stderrBuf = ''
     let outputPath = ''
+    let skippedByArchive = false
 
     proc.stdout.on('data', (chunk: Buffer) => {
       for (const line of chunk.toString().split('\n')) {
         const trimmed = line.trim()
         if (!trimmed) continue
+        if (/has already been recorded in the archive/i.test(trimmed)) { skippedByArchive = true; continue }
         const progress = getProgressPayload(line)
         if (progress && activeDownloadId) {
           mainWindow.webContents.send('download-progress', { id: activeDownloadId, ...progress })
@@ -946,7 +952,7 @@ function downloadWithYtdlp({ id, url, format, outputDir, filename, downloadPrefs
       activeDownloadId = null
       if (code === 0) {
         const fileSize = outputPath && fs.existsSync(outputPath) ? fs.statSync(outputPath).size : undefined
-        resolve({ success: true, outputDir, outputPath: outputPath || undefined, fileSize })
+        resolve({ success: true, outputDir, outputPath: outputPath || undefined, fileSize, skippedByArchive })
         return
       }
       const normalizedError = normalizeYtdlpError(stderrBuf, code)
@@ -1118,6 +1124,7 @@ function buildYtdlpArgs(url: string, format: FormatOpts, template: string, downl
   ]
   if (downloadPrefs.embedThumbnail) args.push('--embed-thumbnail')
   if (downloadPrefs.embedMetadata) args.push('--add-metadata')
+  if (currentSettings.useDownloadArchive) args.push('--download-archive', ARCHIVE_PATH)
   if (downloadPrefs.duplicateStrategy === 'skip') args.push('--no-overwrites')
   if (downloadPrefs.duplicateStrategy === 'overwrite') args.push('--force-overwrites')
   if (downloadPrefs.subtitleMode !== 'off') {
@@ -1261,6 +1268,7 @@ interface DownloadResult {
   outputDir: string
   outputPath?: string
   fileSize?: number
+  skippedByArchive?: boolean
   error?: string
   details?: string
   retryable?: boolean
@@ -1292,6 +1300,7 @@ interface AppSettings {
   discordDeleteAfterSend: boolean
   embedMetadata: boolean
   embedThumbnail: boolean
+  useDownloadArchive: boolean
   autoCheckUpdates: boolean
   autoOpenFolder: boolean
   allowPrerelease: boolean
@@ -1327,6 +1336,16 @@ interface PersistedQueueItem {
   outputPath?: string
   fileSize?: number
 }
+
+ipcMain.handle('get-archive-stats', () => {
+  if (!ARCHIVE_PATH || !fs.existsSync(ARCHIVE_PATH)) return { count: 0 }
+  const lines = fs.readFileSync(ARCHIVE_PATH, 'utf-8').split('\n').filter((l) => l.trim())
+  return { count: lines.length }
+})
+
+ipcMain.handle('clear-archive', () => {
+  if (ARCHIVE_PATH && fs.existsSync(ARCHIVE_PATH)) fs.writeFileSync(ARCHIVE_PATH, '')
+})
 
 ipcMain.handle('check-ytdlp-update', async () => {
   const [current, latest] = await Promise.all([

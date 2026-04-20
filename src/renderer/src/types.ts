@@ -67,6 +67,7 @@ export interface QueueItem {
   downloadPrefs?: DownloadPreferences
   outputPath?: string
   fileSize?: number
+  skippedByArchive?: boolean
 }
 
 export interface HistoryItem {
@@ -123,6 +124,7 @@ export interface AppSettings {
   discordDeleteAfterSend: boolean
   embedMetadata: boolean
   embedThumbnail: boolean
+  useDownloadArchive: boolean
   autoCheckUpdates: boolean
   autoOpenFolder: boolean
   allowPrerelease: boolean

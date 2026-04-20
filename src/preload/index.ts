@@ -74,6 +74,7 @@ export interface AppSettings {
   discordDeleteAfterSend: boolean
   embedMetadata: boolean
   embedThumbnail: boolean
+  useDownloadArchive: boolean
   autoCheckUpdates: boolean
   autoOpenFolder: boolean
   allowPrerelease: boolean
@@ -108,6 +109,7 @@ export interface PersistedQueueItem {
   downloadPrefs?: DownloadPreferences
   outputPath?: string
   fileSize?: number
+  skippedByArchive?: boolean
 }
 
 export interface DownloadResult {
@@ -115,6 +117,7 @@ export interface DownloadResult {
   outputDir: string
   outputPath?: string
   fileSize?: number
+  skippedByArchive?: boolean
   error?: string
   details?: string
   retryable?: boolean
@@ -158,6 +161,8 @@ const api = {
   readLog: (maxLines?: number) => ipcRenderer.invoke('read-log', maxLines) as Promise<string>,
   sendDiscordWebhook: (payload: { webhookUrl: string; embed: { title: string; url: string; thumbnail: string; duration: string; formatLabel: string; outputPath: string; fileSize?: number }; attachFile: boolean; stripMetadata: boolean; includeEmbed: boolean; deleteAfterSend: boolean }) => ipcRenderer.invoke('send-discord-webhook', payload) as Promise<{ deleted: boolean }>,
   showNotification: (opts: { title: string; body: string }) => ipcRenderer.invoke('show-notification', opts) as Promise<void>,
+  getArchiveStats: () => ipcRenderer.invoke('get-archive-stats') as Promise<{ count: number }>,
+  clearArchive: () => ipcRenderer.invoke('clear-archive') as Promise<void>,
   checkYtdlpUpdate: () => ipcRenderer.invoke('check-ytdlp-update') as Promise<{ current: string; latest: string; hasUpdate: boolean }>,
   updateYtdlp: () => ipcRenderer.invoke('update-ytdlp') as Promise<string>,
   exportQueue: (data: string) => ipcRenderer.invoke('export-queue', data) as Promise<boolean>,

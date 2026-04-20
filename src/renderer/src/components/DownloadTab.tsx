@@ -294,6 +294,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
         transferred: i.total || i.transferred,
         outputPath: result.outputPath,
         fileSize: result.fileSize,
+        skippedByArchive: result.skippedByArchive,
         lastFinishedAt: new Date().toISOString(),
       } : i))
 
@@ -313,8 +314,8 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
 
       await window.api.saveHistoryItem(historyItem)
       setHistoryItems((items) => [historyItem, ...items])
-      if (settings.autoOpenFolder) window.api.openFolder(next.outputDir).catch(() => {})
-      if (settings.discordWebhookUrl && !settings.discordAttachFile && settings.discordIncludeEmbed) {
+      if (!result.skippedByArchive && settings.autoOpenFolder) window.api.openFolder(next.outputDir).catch(() => {})
+      if (!result.skippedByArchive && settings.discordWebhookUrl && !settings.discordAttachFile && settings.discordIncludeEmbed) {
         window.api.sendDiscordWebhook({
           webhookUrl: settings.discordWebhookUrl,
           embed: {
@@ -1157,7 +1158,7 @@ function QueueRow({ item, selected, onToggleSelect, onRemove, onCancel, onOpenFo
               ? cancelling ? 'Cancelling...'
                 : indeterminate ? item.speed || 'Downloading...' : `${Math.round(item.progress)}% • ${item.speed || 'Working...'}`
               : item.status === 'error' ? item.error
-              : item.status === 'done' ? [fileNameFromPath(item.outputPath), formatBytes(item.fileSize)].filter(Boolean).join(' • ') || 'Done'
+              : item.status === 'done' ? (item.skippedByArchive ? 'Skipped — already in archive' : [fileNameFromPath(item.outputPath), formatBytes(item.fileSize)].filter(Boolean).join(' • ') || 'Done')
               : item.formatLabel}
           </span>
         </div>
