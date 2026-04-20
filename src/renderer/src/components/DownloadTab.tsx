@@ -385,7 +385,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
           showToast(`Retrying "${next.title}"`, 'info')
           await wait(RETRY_DELAY_MS)
         } else {
-          if (settings.notifications) window.api.showNotification({ title: 'Download failed', body: next.title }).catch(() => {})
+          if (settings.notifications && !failure.cancelled) window.api.showNotification({ title: 'Download failed', body: next.title }).catch(() => {})
           const onError = settings.onError ?? 'continue'
           if (onError === 'pause') {
             queuePausedRef.current = true
@@ -864,7 +864,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
             const active = queue.find((i) => i.status === 'downloading')
             const nextPending = queue.find((i) => i.status === 'pending')
             const showPaused = queuePaused && nextPending
-            const errorItems = queue.filter((i) => i.status === 'error')
+            const errorItems = queue.filter((i) => i.status === 'error' && !i.cancelled)
             const lastFailed = errorItems.length > 0
               ? errorItems.reduce((a, b) => (a.lastFinishedAt ?? '') > (b.lastFinishedAt ?? '') ? a : b)
               : null
@@ -902,6 +902,18 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
                     </div>
                   )}
                 </div>
+                {active && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ flexShrink: 0 }}
+                    onClick={() => {
+                      cancelledKeepInQueueRef.current.add(active.id)
+                      window.api.cancelDownload(active.id).catch(() => {})
+                    }}
+                  >
+                    <CloseIcon />Cancel
+                  </button>
+                )}
               </div>
             )
           })()}
