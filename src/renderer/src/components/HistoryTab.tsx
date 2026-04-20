@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import type { HistoryItem } from '../types'
 import Thumb from './Thumb'
 import ConfirmDialog from './ConfirmDialog'
+import { revealDownloadLocation, openDownloadFolder } from '../utils/downloadLocation'
 import styles from './HistoryTab.module.css'
 
 interface Props {
@@ -118,7 +119,7 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
           </button>
         )}
         {defaultOutputDir && (
-          <button className="btn btn-ghost btn-sm" onClick={() => window.api.openFolder(defaultOutputDir)}>
+          <button className="btn btn-ghost btn-sm" onClick={() => void openDownloadFolder({ outputDir: defaultOutputDir })}>
             Open default folder
           </button>
         )}
@@ -180,16 +181,18 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
                   <QueueIcon />
                   Redownload
                 </button>
-                <button className="btn btn-ghost btn-sm" title="Open folder" onClick={() => window.api.openFolder(item.outputDir)}>
+                <button className="btn btn-ghost btn-sm" title="Open folder" onClick={() => void openDownloadFolder(item)}>
                   <FolderIcon />
                   Open
                 </button>
-                {item.outputPath && (
-                  <button className="btn btn-ghost btn-sm" title="Show file" onClick={() => window.api.revealItem(item.outputPath!)}>
-                    <FileIcon />
-                    Reveal
-                  </button>
-                )}
+                <button
+                  className="btn btn-ghost btn-sm"
+                  title={item.outputPath ? 'Show file' : 'Open folder'}
+                  onClick={() => void revealDownloadLocation(item, showToast)}
+                >
+                  <FileIcon />
+                  Reveal
+                </button>
                 <button className="btn btn-ghost btn-sm" title="Remove from history" onClick={() => handleDelete(item.id)}>
                   <TrashIcon />
                   Remove

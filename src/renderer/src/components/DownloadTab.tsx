@@ -5,6 +5,7 @@ import PlaylistPicker from './PlaylistPicker'
 import PathField from './PathField'
 import Thumb from './Thumb'
 import ConfirmDialog from './ConfirmDialog'
+import { revealDownloadLocation, openDownloadFolder } from '../utils/downloadLocation'
 import styles from './DownloadTab.module.css'
 
 const DEFAULT_MAX_ATTEMPTS = 3
@@ -1045,8 +1046,8 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
                     cancelledKeepInQueueRef.current.add(item.id)
                     await window.api.cancelDownload(item.id).catch(() => {})
                   }}
-                onOpenFolder={() => window.api.openFolder(item.outputDir)}
-                onReveal={() => item.outputPath ? window.api.revealItem(item.outputPath) : Promise.resolve()}
+                onOpenFolder={() => openDownloadFolder(item)}
+                onReveal={() => revealDownloadLocation(item, showToast)}
                 onRetry={() => {
                   updateQueue((q) => q.map((i) => i.id === item.id ? {
                     ...i,
@@ -1196,7 +1197,7 @@ function QueueRow({ item, selected, onToggleSelect, onRemove, onCancel, onOpenFo
         {item.status !== 'downloading' && <button className="btn btn-ghost btn-sm" onClick={onMoveUp} title="Move up"><ArrowUpIcon />Up</button>}
         {item.status !== 'downloading' && <button className="btn btn-ghost btn-sm" onClick={onMoveDown} title="Move down"><ArrowDownIcon />Down</button>}
         {item.status === 'done' && <button className="btn btn-ghost btn-sm" onClick={onOpenFolder} title="Open folder"><FolderIcon />Open</button>}
-        {item.status === 'done' && item.outputPath && <button className="btn btn-ghost btn-sm" onClick={onReveal} title="Reveal file"><FileIcon />Reveal</button>}
+        {item.status === 'done' && <button className="btn btn-ghost btn-sm" onClick={onReveal} title={item.outputPath ? 'Reveal file' : 'Open folder'}><FileIcon />Reveal</button>}
         {item.status === 'done' && item.outputPath && discordWebhookUrl && (item.fileSize ?? 0) <= DISCORD_MAX_BYTES && (
           <button
             className="btn btn-ghost btn-sm"
