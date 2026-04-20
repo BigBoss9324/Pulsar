@@ -77,6 +77,7 @@ export interface AppSettings {
   autoCheckUpdates: boolean
   autoOpenFolder: boolean
   allowPrerelease: boolean
+  notifications: boolean
   maxHistoryItems: number
   enableDevMode: boolean
 }
@@ -156,6 +157,7 @@ const api = {
   installVersion: (downloadUrl: string) => ipcRenderer.invoke('install-version', downloadUrl) as Promise<void>,
   readLog: (maxLines?: number) => ipcRenderer.invoke('read-log', maxLines) as Promise<string>,
   sendDiscordWebhook: (payload: { webhookUrl: string; embed: { title: string; url: string; thumbnail: string; duration: string; formatLabel: string; outputPath: string; fileSize?: number }; attachFile: boolean; stripMetadata: boolean; includeEmbed: boolean; deleteAfterSend: boolean }) => ipcRenderer.invoke('send-discord-webhook', payload) as Promise<{ deleted: boolean }>,
+  showNotification: (opts: { title: string; body: string }) => ipcRenderer.invoke('show-notification', opts) as Promise<void>,
   onStatus: (cb: (d: StatusEvent) => void) => on<StatusEvent>('status', cb),
   onToast: (cb: (d: { message: string; type: 'success' | 'error' | 'info' }) => void) => on('toast', cb),
   onUpdateAvailable: (cb: (d: AppUpdateInfo) => void) => on<AppUpdateInfo>('update-available', cb),

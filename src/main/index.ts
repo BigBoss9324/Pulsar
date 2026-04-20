@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, Notification } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import path from 'path'
 import fs from 'fs'
@@ -529,6 +529,7 @@ function defaultAppSettings(): AppSettings {
     autoCheckUpdates: true,
     allowPrerelease: false,
     autoOpenFolder: false,
+    notifications: true,
     maxHistoryItems: 500,
     enableDevMode: false,
   }
@@ -1266,6 +1267,7 @@ interface AppSettings {
   autoCheckUpdates: boolean
   autoOpenFolder: boolean
   allowPrerelease: boolean
+  notifications: boolean
   maxHistoryItems: number
   enableDevMode: boolean
 }
@@ -1297,6 +1299,11 @@ interface PersistedQueueItem {
   outputPath?: string
   fileSize?: number
 }
+
+ipcMain.handle('show-notification', (_e, { title, body }: { title: string; body: string }) => {
+  if (!Notification.isSupported()) return
+  new Notification({ title, body, silent: false }).show()
+})
 
 ipcMain.handle('get-releases', () => {
   return fetchGithubReleases()

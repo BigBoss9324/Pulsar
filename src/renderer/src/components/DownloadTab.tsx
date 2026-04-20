@@ -177,6 +177,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
   const cancelledByUserRef = useRef<Set<string>>(new Set())
   const cancelledKeepInQueueRef = useRef<Set<string>>(new Set())
   const pausedByUserRef = useRef<Set<string>>(new Set())
+  const queueWasActiveRef = useRef(false)
 
   const urlInfo = isValidUrl(url) ? detectUrl(url) : null
   const showPlaylistBanner = urlInfo?.canBePlaylist && url.includes('list=') && !videoInfo
@@ -244,7 +245,15 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
   const processQueue = useCallback(async () => {
     if (processingRef.current || queuePausedRef.current) return
     const next = queueRef.current.find((i) => i.status === 'pending')
-    if (!next) return
+    if (!next) {
+      if (queueWasActiveRef.current && settings.notifications) {
+        queueWasActiveRef.current = false
+        const total = queueRef.current.filter((i) => i.status === 'done' || i.status === 'error').length
+        window.api.showNotification({ title: 'Queue finished', body: `${total} download${total !== 1 ? 's' : ''} completed` }).catch(() => {})
+      }
+      return
+    }
+    queueWasActiveRef.current = true
 
     processingRef.current = true
     updateQueue((q) => q.map((i) => i.id === next.id ? {
@@ -376,6 +385,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
           showToast(`Retrying "${next.title}"`, 'info')
           await wait(RETRY_DELAY_MS)
         } else {
+          if (settings.notifications) window.api.showNotification({ title: 'Download failed', body: next.title }).catch(() => {})
           const onError = settings.onError ?? 'continue'
           if (onError === 'pause') {
             queuePausedRef.current = true
@@ -393,7 +403,7 @@ export default function DownloadTab({ appReady, redownloadRequest, settings, sho
       processingRef.current = false
       processQueue()
     }
-  }, [onDownloadComplete, settings.autoOpenFolder, settings.discordWebhookUrl, settings.discordAttachFile, settings.onError, showToast, updateQueue])
+  }, [onDownloadComplete, settings.autoOpenFolder, settings.notifications, settings.discordWebhookUrl, settings.discordAttachFile, settings.discordIncludeEmbed, settings.onError, showToast, updateQueue])
 
   useEffect(() => {
     if (!queuePaused && appReady) processQueue()

@@ -302,6 +302,12 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
             checked={draft.autoOpenFolder}
             onChange={(checked) => setDraft((prev) => ({ ...prev, autoOpenFolder: checked }))}
           />
+          <ToggleSetting
+            title="System notifications"
+            description="Show a Windows notification when each download finishes"
+            checked={draft.notifications}
+            onChange={(checked) => setDraft((prev) => ({ ...prev, notifications: checked }))}
+          />
         </div>
 
         <div className={styles.divider} />

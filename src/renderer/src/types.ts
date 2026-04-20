@@ -126,6 +126,7 @@ export interface AppSettings {
   autoCheckUpdates: boolean
   autoOpenFolder: boolean
   allowPrerelease: boolean
+  notifications: boolean
   maxHistoryItems: number
   enableDevMode: boolean
 }
