@@ -1,14 +1,22 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
 import type { AppStatus, HistoryItem, AppSettings, AppUpdateInfo, AppBuildInfo } from './types'
 import DownloadTab from './components/DownloadTab'
 import DevTab from './components/DevTab'
 import HistoryTab from './components/HistoryTab'
 import SettingsModal from './components/SettingsModal'
+
+// Optional Discord integration — omit the folder to exclude from a build
+const _discordMod = import.meta.glob('./components/discord bot integration/index.ts')
+const _discordKey = './components/discord bot integration/index.ts'
+const hasDiscord = _discordKey in _discordMod
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const DiscordTab = hasDiscord ? lazy(_discordMod[_discordKey] as any) : null
+import Button from './components/Button'
 import styles from './App.module.css'
 import './index.css'
 import { renderReleaseNotes } from './utils/renderReleaseNotes'
 
-type Tab = 'download' | 'history' | 'dev'
+type Tab = 'download' | 'history' | 'discord' | 'dev'
 type RedownloadRequest = { nonce: number; items: HistoryItem[] } | null
 
 export default function App() {
@@ -118,35 +126,49 @@ export default function App() {
           <span className={styles.appName}>Pulsar</span>
         </div>
         <nav className={styles.tabs}>
-          <button
-            className={`${styles.tab} ${tab === 'download' ? styles.tabActive : ''}`}
+          <Button
+            variant="tab"
+            active={tab === 'download'}
             onClick={() => setTab('download')}
           >
             Download
-          </button>
-          <button
-            className={`${styles.tab} ${tab === 'history' ? styles.tabActive : ''}`}
+          </Button>
+          <Button
+            variant="tab"
+            active={tab === 'history'}
             onClick={() => setTab('history')}
           >
             History
-          </button>
+          </Button>
+          {hasDiscord && (
+            <Button
+              variant="tab"
+              active={tab === 'discord'}
+              onClick={() => setTab('discord')}
+            >
+              Discord
+            </Button>
+          )}
           {isDev && (
-            <button
-              className={`${styles.tab} ${tab === 'dev' ? styles.tabActive : ''}`}
+            <Button
+              variant="tab"
+              active={tab === 'dev'}
               onClick={() => setTab('dev')}
             >
               Dev
-            </button>
+            </Button>
           )}
         </nav>
         <div className={styles.statusGroup}>
-          <button
-            className={`btn btn-ghost btn-sm ${styles.menuButton}`}
+          <Button
+            variant="ghost"
+            size="sm"
+            className={styles.menuButton}
             onClick={() => setSettingsOpen(true)}
             title="Settings"
           >
             Settings
-          </button>
+          </Button>
           {isDevMode && <span className={styles.devBadge}>Development Build</span>}
           {showBetaBadge && <span className={styles.betaBadge}>Beta</span>}
           <StatusBadge status={status} />
@@ -173,6 +195,17 @@ export default function App() {
             defaultOutputDir={settings.defaultOutputDir}
           />
         )}
+        {hasDiscord && DiscordTab && (
+          <section className={tab === 'discord' ? styles.panelActive : styles.panelHidden}>
+            <Suspense fallback={null}>
+              <DiscordTab
+                showToast={showToast}
+                defaultOutputDir={settings?.defaultOutputDir}
+                isDev={isDev}
+              />
+            </Suspense>
+          </section>
+        )}
         {tab === 'dev' && <DevTab version={displayVersion} status={status} showToast={showToast} />}
       </main>
 
@@ -181,12 +214,12 @@ export default function App() {
         <span className={styles.footerDivider} aria-hidden="true">&bull;</span>
         <span className={styles.footerText}>Multi-service video and music downloader</span>
         <span className={styles.footerDivider} aria-hidden="true">&bull;</span>
-        <button
-          className={styles.footerLink}
+        <Button
+          variant="link"
           onClick={() => window.api.openExternalUrl('https://github.com/BigBoss9324/Pulsar/releases').catch(() => {})}
         >
           Releases
-        </button>
+        </Button>
       </footer>
 
       {toast && (
@@ -238,12 +271,12 @@ export default function App() {
               </div>
             )}
             <div className={styles.updateActions}>
-              <button className="btn btn-secondary" onClick={() => setUpdatePrompt(null)} disabled={downloadingUpdate}>
+              <Button variant="secondary" onClick={() => setUpdatePrompt(null)} disabled={downloadingUpdate}>
                 Stay on current version
-              </button>
-              <button className="btn btn-primary" onClick={() => void startAppUpdate()} disabled={downloadingUpdate}>
+              </Button>
+              <Button variant="primary" onClick={() => void startAppUpdate()} disabled={downloadingUpdate}>
                 {downloadingUpdate ? 'Starting download...' : 'Update now'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

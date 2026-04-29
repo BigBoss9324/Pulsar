@@ -75,6 +75,11 @@ export interface AppSettings {
   embedMetadata: boolean
   embedThumbnail: boolean
   useDownloadArchive: boolean
+  ytdlpRequestDelaySeconds: number
+  ytdlpSleepIntervalMin: number
+  ytdlpSleepIntervalMax: number
+  maxConcurrentDownloads: number
+  youtubeCookiesFrom: string
   autoCheckUpdates: boolean
   autoOpenFolder: boolean
   allowPrerelease: boolean
@@ -167,6 +172,16 @@ const api = {
   updateYtdlp: () => ipcRenderer.invoke('update-ytdlp') as Promise<string>,
   exportQueue: (data: string) => ipcRenderer.invoke('export-queue', data) as Promise<boolean>,
   importQueue: () => ipcRenderer.invoke('import-queue') as Promise<string | null>,
+  botFetch: (opts: { endpoint: string; method?: string; body?: string }) =>
+    ipcRenderer.invoke('bot-fetch', opts) as Promise<{ ok: boolean; status: number; data: unknown }>,
+  discordOAuthLogin: () =>
+    ipcRenderer.invoke('discord-oauth-login') as Promise<{ access_token: string; token_type: string }>,
+  listAudioFiles: (dir: string) =>
+    ipcRenderer.invoke('list-audio-files', dir) as Promise<Array<{ name: string; path: string; size: number }>>,
+  chooseAudioFiles: () =>
+    ipcRenderer.invoke('choose-audio-files') as Promise<string[]>,
+  exportPlaylistFiles: (payload: { name: string; tracks: Array<{ filePath?: string; title?: string }> }) =>
+    ipcRenderer.invoke('export-playlist-files', payload) as Promise<{ canceled: boolean; copied: number; skipped: number; folderPath: string }>,
   onStatus: (cb: (d: StatusEvent) => void) => on<StatusEvent>('status', cb),
   onToast: (cb: (d: { message: string; type: 'success' | 'error' | 'info' }) => void) => on('toast', cb),
   onUpdateAvailable: (cb: (d: AppUpdateInfo) => void) => on<AppUpdateInfo>('update-available', cb),

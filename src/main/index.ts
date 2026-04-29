@@ -4,6 +4,7 @@ import path from 'path'
 import fs from 'fs'
 import { spawn, ChildProcess } from 'child_process'
 import https from 'https'
+import http from 'http'
 import { pathToFileURL } from 'url'
 
 const IS_WIN = process.platform === 'win32'
@@ -19,12 +20,12 @@ let SETTINGS_PATH: string
 let QUEUE_PATH: string
 let LOG_PATH: string
 let ARCHIVE_PATH: string
+let WINDOW_STATE_PATH: string
 
 let mainWindow: BrowserWindow
 let splashWindow: BrowserWindow | null = null
 let splashShownAt = 0
-let activeProc: ChildProcess | null = null
-let activeDownloadId: string | null = null
+const activeProcs = new Map<string, ChildProcess>()
 let setupReady = false
 let updateInstallScheduled = false
 let updateDownloadRequested = false
@@ -116,14 +117,45 @@ function createSplashWindow(): void {
   splashWindow.on('closed', () => { splashWindow = null })
 }
 
+interface WindowState { width: number; height: number; x?: number; y?: number; isMaximized: boolean }
+
+function loadWindowState(): WindowState {
+  const defaults: WindowState = { width: 920, height: 700, isMaximized: false }
+  try {
+    const saved = JSON.parse(fs.readFileSync(WINDOW_STATE_PATH, 'utf-8')) as Partial<WindowState>
+    return {
+      width: Math.max(700, Number(saved.width) || defaults.width),
+      height: Math.max(520, Number(saved.height) || defaults.height),
+      x: Number.isFinite(saved.x) ? saved.x : undefined,
+      y: Number.isFinite(saved.y) ? saved.y : undefined,
+      isMaximized: Boolean(saved.isMaximized),
+    }
+  } catch {
+    return defaults
+  }
+}
+
+function saveWindowState(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  try {
+    const isMaximized = mainWindow.isMaximized()
+    const { width, height, x, y } = mainWindow.getNormalBounds()
+    fs.writeFileSync(WINDOW_STATE_PATH, JSON.stringify({ width, height, x, y, isMaximized }))
+  } catch {}
+}
+
 function createWindow(): void {
   const icon = app.isPackaged
     ? path.join(process.resourcesPath, 'icon.ico')
     : path.join(__dirname, '../../build/Pulsar.ico')
 
+  const winState = loadWindowState()
+
   mainWindow = new BrowserWindow({
-    width: 920,
-    height: 700,
+    width: winState.width,
+    height: winState.height,
+    x: winState.x,
+    y: winState.y,
     minWidth: 700,
     minHeight: 520,
     icon,
@@ -138,6 +170,8 @@ function createWindow(): void {
     backgroundColor: '#0f0f0f',
     show: false,
   })
+
+  mainWindow.on('close', saveWindowState)
 
   if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -157,6 +191,7 @@ function createWindow(): void {
     const revealMainWindow = () => {
       if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close()
       mainWindow.show()
+      if (winState.isMaximized) mainWindow.maximize()
     }
 
     const remainingSplashMs = Math.max(0, MIN_SPLASH_MS - (Date.now() - splashShownAt))
@@ -263,6 +298,22 @@ function ffmpegArgs(): string[] {
 
 function baseYtdlpArgs(): string[] {
   return ['--ignore-config', ...ffmpegArgs()]
+}
+
+function normalizeRequestDelay(value: unknown): number {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numeric)) return 0
+  return Math.max(0, Math.min(10, Math.round(numeric * 10) / 10))
+}
+
+function ytdlpCompatibilityArgs(): string[] {
+  const args: string[] = []
+  const delay = normalizeRequestDelay(currentSettings.ytdlpRequestDelaySeconds)
+  if (delay > 0) args.push('--sleep-requests', String(delay))
+  if (currentSettings.youtubeCookiesFrom && currentSettings.youtubeCookiesFrom !== 'none') {
+    args.push('--cookies-from-browser', currentSettings.youtubeCookiesFrom)
+  }
+  return args
 }
 
 function runYtDlp(args: string[]): Promise<string> {
@@ -453,6 +504,14 @@ function improveDownloadErrorMessage(message: string): string {
   const cleaned = stripYtdlpPrefix(message)
   const normalized = cleaned.toLowerCase()
 
+  if (
+    (normalized.includes('sign in to confirm you') && normalized.includes('not a bot'))
+    || normalized.includes('confirm you are not a bot')
+    || normalized.includes('confirm that you are not a bot')
+  ) {
+    return 'YouTube wants a signed-in browser session before allowing this request. Open the item in your browser, confirm access there, then try again later.'
+  }
+
   if (normalized.includes('requested format is not available')) {
     return 'That format is no longer available for this item. Fetch the link again and choose another format.'
   }
@@ -550,6 +609,11 @@ function defaultAppSettings(): AppSettings {
     embedMetadata: true,
     embedThumbnail: true,
     useDownloadArchive: true,
+    ytdlpRequestDelaySeconds: 0,
+    ytdlpSleepIntervalMin: 8,
+    ytdlpSleepIntervalMax: 15,
+    maxConcurrentDownloads: 1,
+    youtubeCookiesFrom: 'none',
     autoCheckUpdates: true,
     allowPrerelease: false,
     autoOpenFolder: false,
@@ -574,6 +638,7 @@ function readSettings(): AppSettings {
     ...defaults,
     ...loaded,
     defaultOutputDir: loaded.defaultOutputDir || defaults.defaultOutputDir,
+    ytdlpRequestDelaySeconds: normalizeRequestDelay(loaded.ytdlpRequestDelaySeconds),
   }
 }
 
@@ -586,6 +651,7 @@ function saveSettings(next: AppSettings): AppSettings {
     filenameTemplate: (next.filenameTemplate || defaults.filenameTemplate).trim() || defaults.filenameTemplate,
     subtitleLanguages: (next.subtitleLanguages || defaults.subtitleLanguages).trim() || defaults.subtitleLanguages,
     maxHistoryItems: Math.max(10, Math.min(5000, Math.floor(next.maxHistoryItems || defaults.maxHistoryItems))),
+    ytdlpRequestDelaySeconds: normalizeRequestDelay(next.ytdlpRequestDelaySeconds),
   }
   fs.writeFileSync(SETTINGS_PATH, JSON.stringify(currentSettings, null, 2))
   if (app.isPackaged) autoUpdater.allowPrerelease = currentSettings.allowPrerelease
@@ -744,6 +810,7 @@ app.whenReady().then(() => {
   QUEUE_PATH = path.join(userData, 'queue.json')
   LOG_PATH = path.join(userData, 'pulsar.log')
   ARCHIVE_PATH = path.join(userData, 'archive.txt')
+  WINDOW_STATE_PATH = path.join(userData, 'window-state.json')
   logInfo('Pulsar starting up')
   currentSettings = readSettings()
 
@@ -779,7 +846,16 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 
 ipcMain.handle('get-info', async (_e, url: string) => {
-  const raw = await runYtDlp([url, '--dump-single-json', '--skip-download', '--no-playlist', '--no-warnings'])
+  const raw = await runYtDlp([
+    ...ytdlpCompatibilityArgs(),
+    url,
+    '--dump-single-json',
+    '--skip-download',
+    '--no-playlist',
+    '--no-warnings',
+  ]).catch((err) => {
+    throw new Error(improveDownloadErrorMessage((err as Error).message))
+  })
   const info = JSON.parse(raw)
   return {
     title: info.title as string,
@@ -795,8 +871,16 @@ ipcMain.handle('get-playlist-info', (_e, url: string) => {
   let playlistTitle = ''
 
   return new Promise<{ title: string; items: PlaylistItem[] }>((resolve, reject) => {
-    const proc = spawn(YTDLP_PATH, [...baseYtdlpArgs(), url, '--flat-playlist', '--dump-json', '--no-warnings'])
+    const proc = spawn(YTDLP_PATH, [
+      ...baseYtdlpArgs(),
+      ...ytdlpCompatibilityArgs(),
+      url,
+      '--flat-playlist',
+      '--dump-json',
+      '--no-warnings',
+    ])
     let buf = ''
+    let err = ''
 
     proc.stdout.on('data', (chunk: Buffer) => {
       buf += chunk.toString()
@@ -821,10 +905,11 @@ ipcMain.handle('get-playlist-info', (_e, url: string) => {
         }
       }
     })
+    proc.stderr.on('data', (chunk: Buffer) => { err += chunk.toString() })
 
     proc.on('close', (code) => {
       if (code === 0 || items.length > 0) resolve({ title: playlistTitle, items })
-      else reject(new Error('Failed to fetch playlist'))
+      else reject(new Error(improveDownloadErrorMessage(normalizeYtdlpError(err, code))))
     })
     proc.on('error', reject)
   })
@@ -838,6 +923,53 @@ ipcMain.handle('choose-directory', async () => {
   return r.canceled ? null : r.filePaths[0]
 })
 
+ipcMain.handle('choose-audio-files', async () => {
+  const r = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile', 'multiSelections'],
+    title: 'Select audio files',
+    filters: [
+      { name: 'Audio Files', extensions: ['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'opus', 'webm', 'mp4'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  })
+  return r.canceled ? [] : r.filePaths
+})
+
+ipcMain.handle('export-playlist-files', async (_e, { name, tracks }: { name: string; tracks: PlaylistExportTrack[] }) => {
+  const localTracks = tracks.filter((track) => track.filePath)
+  if (localTracks.length === 0) return { canceled: false, copied: 0, skipped: 0, folderPath: '' }
+
+  const r = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: 'Choose where to create the playlist folder',
+  })
+  if (r.canceled || !r.filePaths[0]) return { canceled: true, copied: 0, skipped: 0, folderPath: '' }
+
+  const folderName = sanitizeOutputTemplateSegment(name || 'Playlist') || 'Playlist'
+  const folderPath = path.join(r.filePaths[0], folderName)
+  fs.mkdirSync(folderPath, { recursive: true })
+
+  let copied = 0
+  let skipped = 0
+  for (const track of localTracks) {
+    const sourcePath = track.filePath!
+    try {
+      if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) {
+        skipped += 1
+        continue
+      }
+      const targetPath = uniqueFilePath(folderPath, path.basename(sourcePath))
+      fs.copyFileSync(sourcePath, targetPath)
+      copied += 1
+    } catch (err) {
+      skipped += 1
+      logError('Failed to copy playlist file', err)
+    }
+  }
+
+  return { canceled: false, copied, skipped, folderPath }
+})
+
 ipcMain.handle('get-app-version', () => app.getVersion())
 ipcMain.handle('get-app-build-info', () => getAppBuildInfo())
 ipcMain.handle('get-current-status', () => currentStatus)
@@ -849,7 +981,14 @@ ipcMain.handle('save-queue-state', (_e, queue: PersistedQueueItem[]) => {
 })
 ipcMain.handle('open-external-url', (_e, url: string) => shell.openExternal(url))
 ipcMain.handle('open-app-data-folder', () => shell.openPath(app.getPath('userData')))
-ipcMain.handle('reveal-item', (_e, filePath: string) => shell.showItemInFolder(filePath))
+ipcMain.handle('reveal-item', (_e, filePath: string) => {
+  if (process.platform === 'win32') {
+    const normalized = path.win32.normalize(filePath)
+    spawn('explorer.exe', [`/select,"${normalized}"`], { shell: true, detached: true, stdio: 'ignore' }).unref()
+  } else {
+    shell.showItemInFolder(filePath)
+  }
+})
 ipcMain.handle('check-for-updates', async () => {
   if (!app.isPackaged) {
     sendNonBlockingStatus('Ready - update checks run only in installed builds.')
@@ -906,28 +1045,48 @@ ipcMain.handle('download-app-update', async () => {
 })
 
 ipcMain.handle('download', (_e, req: DownloadRequest) => {
-  if (activeProc) {
-    return Promise.resolve({
-      success: false,
-      outputDir: req.outputDir,
-      error: 'A download is already in progress.',
-      retryable: false,
-      cancelled: false,
-      resumable: true,
-    } satisfies DownloadResult)
-  }
-
   return downloadWithYtdlp(req).catch((failure: DownloadResult) => failure)
 })
 
-function downloadWithYtdlp({ id, url, format, outputDir, filename, downloadPrefs }: DownloadRequest) {
+async function downloadWithYtdlp({ id, url, format, outputDir, filename, downloadPrefs }: DownloadRequest) {
   const template = buildOutputTemplate(outputDir, filename, downloadPrefs)
   const args = buildYtdlpArgs(url, format, template, downloadPrefs)
 
+  try {
+    return await runDownloadProcess({ id, url, outputDir, args })
+  } catch (failure) {
+    if (!shouldRetryWithFormatFallback(format, failure)) throw failure
+
+    const fallbackArgs = buildYtdlpArgs(url, format, template, downloadPrefs, true)
+    logInfo('Retrying download with fallback format selector', { id, url, quality: format.quality })
+    return runDownloadProcess({ id, url, outputDir, args: fallbackArgs, fallback: true })
+  }
+}
+
+function shouldRetryWithFormatFallback(format: FormatOpts, failure: unknown): boolean {
+  if (format.type !== 'video') return false
+  const details = failure && typeof failure === 'object' && 'details' in failure
+    ? String((failure as DownloadResult).details ?? '')
+    : ''
+  return details.toLowerCase().includes('requested format is not available')
+}
+
+function runDownloadProcess({
+  id,
+  url,
+  outputDir,
+  args,
+  fallback = false,
+}: {
+  id: string
+  url: string
+  outputDir: string
+  args: string[]
+  fallback?: boolean
+}) {
   return new Promise<DownloadResult>((resolve, reject) => {
     const proc = spawn(YTDLP_PATH, [...baseYtdlpArgs(), ...args])
-    activeProc = proc
-    activeDownloadId = id
+    activeProcs.set(id, proc)
     let stderrBuf = ''
     let outputPath = ''
     let skippedByArchive = false
@@ -938,8 +1097,8 @@ function downloadWithYtdlp({ id, url, format, outputDir, filename, downloadPrefs
         if (!trimmed) continue
         if (/has already been recorded in the archive/i.test(trimmed)) { skippedByArchive = true; continue }
         const progress = getProgressPayload(line)
-        if (progress && activeDownloadId) {
-          mainWindow.webContents.send('download-progress', { id: activeDownloadId, ...progress })
+        if (progress) {
+          mainWindow.webContents.send('download-progress', { id, ...progress })
           continue
         }
         if (!trimmed.startsWith('[')) outputPath = trimmed
@@ -948,8 +1107,7 @@ function downloadWithYtdlp({ id, url, format, outputDir, filename, downloadPrefs
     proc.stderr.on('data', (chunk: Buffer) => { stderrBuf += chunk.toString() })
 
     proc.on('close', (code) => {
-      activeProc = null
-      activeDownloadId = null
+      activeProcs.delete(id)
       if (code === 0) {
         const fileSize = outputPath && fs.existsSync(outputPath) ? fs.statSync(outputPath).size : undefined
         resolve({ success: true, outputDir, outputPath: outputPath || undefined, fileSize, skippedByArchive })
@@ -967,12 +1125,11 @@ function downloadWithYtdlp({ id, url, format, outputDir, filename, downloadPrefs
         resumable: !cancelled,
         details: stripYtdlpPrefix(normalizedError),
       }
-      logError('Download failed', { code, url, outputDir, stderr: stderrBuf.trim() || normalizedError, failure })
+      logError(fallback ? 'Fallback download failed' : 'Download failed', { code, url, outputDir, stderr: stderrBuf.trim() || normalizedError, failure })
       reject(failure)
     })
     proc.on('error', (e) => {
-      activeProc = null
-      activeDownloadId = null
+      activeProcs.delete(id)
       logError('Download process error', e)
       reject({
         success: false,
@@ -988,10 +1145,14 @@ function downloadWithYtdlp({ id, url, format, outputDir, filename, downloadPrefs
 }
 
 ipcMain.handle('cancel-download', (_e, id?: string) => {
-  if (activeProc && (!id || id === activeDownloadId)) {
-    stopActiveDownloadProcess(activeProc)
-    activeProc = null
-    activeDownloadId = null
+  if (id) {
+    const proc = activeProcs.get(id)
+    if (proc) { stopActiveDownloadProcess(proc); activeProcs.delete(id) }
+  } else {
+    for (const [procId, proc] of activeProcs) {
+      stopActiveDownloadProcess(proc)
+      activeProcs.delete(procId)
+    }
   }
 })
 ipcMain.handle('open-folder', (_e, p: string) => shell.openPath(p))
@@ -1109,7 +1270,13 @@ ipcMain.handle('save-history-item', (_e, item: HistoryItem) => {
   fs.writeFileSync(HISTORY_PATH, JSON.stringify(h.slice(0, currentSettings.maxHistoryItems), null, 2))
 })
 
-function buildYtdlpArgs(url: string, format: FormatOpts, template: string, downloadPrefs: DownloadPreferences): string[] {
+function buildYtdlpArgs(
+  url: string,
+  format: FormatOpts,
+  template: string,
+  downloadPrefs: DownloadPreferences,
+  useFallbackSelector = false,
+): string[] {
   const args = [
     url,
     '-o',
@@ -1122,6 +1289,13 @@ function buildYtdlpArgs(url: string, format: FormatOpts, template: string, downl
     '--print',
     'after_move:filepath',
   ]
+  args.push(...ytdlpCompatibilityArgs())
+  const sleepMin = Math.max(0, currentSettings.ytdlpSleepIntervalMin ?? 0)
+  const sleepMax = Math.max(sleepMin, currentSettings.ytdlpSleepIntervalMax ?? 0)
+  if (sleepMin > 0) {
+    args.push('--sleep-interval', String(sleepMin))
+    if (sleepMax > sleepMin) args.push('--max-sleep-interval', String(sleepMax))
+  }
   if (downloadPrefs.embedThumbnail) args.push('--embed-thumbnail')
   if (downloadPrefs.embedMetadata) args.push('--add-metadata')
   if (currentSettings.useDownloadArchive) args.push('--download-archive', ARCHIVE_PATH)
@@ -1135,10 +1309,14 @@ function buildYtdlpArgs(url: string, format: FormatOpts, template: string, downl
   if (format.type === 'audio') {
     args.push('-x', '--audio-format', format.audioFormat ?? 'mp3', '--audio-quality', '0')
   } else {
-    args.push('-f', buildPreferredVideoSelector(format.quality ?? 'best'))
+    args.push('-f', useFallbackSelector ? buildFallbackVideoSelector() : (format.selector || buildPreferredVideoSelector(format.quality ?? 'best')))
     args.push('--merge-output-format', 'mp4')
   }
   return args
+}
+
+function buildFallbackVideoSelector(): string {
+  return 'bv*+ba/b'
 }
 
 function buildPreferredVideoSelector(quality: string): string {
@@ -1237,6 +1415,18 @@ function sanitizeOutputTemplateSegment(value: string): string {
     .trim()
 }
 
+function uniqueFilePath(dir: string, filename: string): string {
+  const ext = path.extname(filename)
+  const base = path.basename(filename, ext)
+  let candidate = path.join(dir, filename)
+  let counter = 2
+  while (fs.existsSync(candidate)) {
+    candidate = path.join(dir, `${base} (${counter})${ext}`)
+    counter += 1
+  }
+  return candidate
+}
+
 function buildOutputTemplate(outputDir: string, filename: string, downloadPrefs: DownloadPreferences): string {
   const manualName = sanitizeOutputTemplateSegment(filename)
   const templateBase = manualName || sanitizeOutputTemplateSegment(downloadPrefs.filenameTemplate || '%(title)s')
@@ -1301,6 +1491,11 @@ interface AppSettings {
   embedMetadata: boolean
   embedThumbnail: boolean
   useDownloadArchive: boolean
+  ytdlpRequestDelaySeconds: number
+  ytdlpSleepIntervalMin: number
+  ytdlpSleepIntervalMax: number
+  maxConcurrentDownloads: number
+  youtubeCookiesFrom: 'none' | 'chrome' | 'firefox' | 'edge' | 'brave' | 'opera' | 'vivaldi' | 'chromium'
   autoCheckUpdates: boolean
   autoOpenFolder: boolean
   allowPrerelease: boolean
@@ -1336,6 +1531,10 @@ interface PersistedQueueItem {
   outputPath?: string
   fileSize?: number
 }
+interface PlaylistExportTrack {
+  filePath?: string
+  title?: string
+}
 
 ipcMain.handle('get-archive-stats', () => {
   if (!ARCHIVE_PATH || !fs.existsSync(ARCHIVE_PATH)) return { count: 0 }
@@ -1356,7 +1555,7 @@ ipcMain.handle('check-ytdlp-update', async () => {
 })
 
 ipcMain.handle('update-ytdlp', async () => {
-  if (activeProc) throw new Error('A download is in progress. Finish or cancel it first.')
+  if (activeProcs.size > 0) throw new Error('A download is in progress. Finish or cancel it first.')
   const latest = await fetchLatestYtdlpVersion()
   const filename = IS_WIN ? 'yt-dlp.exe' : (process.platform === 'darwin' ? 'yt-dlp_macos' : 'yt-dlp_linux')
   const url = `https://github.com/yt-dlp/yt-dlp/releases/download/${latest}/${filename}`
@@ -1469,6 +1668,129 @@ ipcMain.handle('wipe-and-uninstall', async () => {
   }
 
   app.quit()
+})
+
+ipcMain.handle('bot-fetch', async (_e, { endpoint, method = 'GET', body }: { endpoint: string; method?: string; body?: string }) => {
+  const BOT_API = 'http://localhost:3001'
+  const BOT_KEY = 'e401d64f94e8d3c35db21d64b684266179693f04130e0100b673f7d94af4273c'
+  const url = new URL(endpoint, BOT_API)
+
+  return new Promise<{ ok: boolean; status: number; data: unknown }>((resolve, reject) => {
+    const options = {
+      hostname: url.hostname,
+      port: url.port || 80,
+      path: url.pathname + url.search,
+      method,
+      headers: {
+        'Authorization': `Bearer ${BOT_KEY}`,
+        'Content-Type': 'application/json',
+        ...(body ? { 'Content-Length': Buffer.byteLength(body) } : {}),
+      } as Record<string, string | number>,
+    }
+
+    const req = http.request(options, (res) => {
+      let raw = ''
+      res.on('data', (chunk) => { raw += chunk })
+      res.on('end', () => {
+        try {
+          const data = raw ? JSON.parse(raw) : null
+          resolve({ ok: (res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 300, status: res.statusCode ?? 0, data })
+        } catch {
+          resolve({ ok: false, status: res.statusCode ?? 0, data: raw })
+        }
+      })
+    })
+
+    req.on('error', () => resolve({ ok: false, status: 0, data: null }))
+    if (body) req.write(body)
+    req.end()
+  })
+})
+
+ipcMain.handle('discord-oauth-login', async () => {
+  const CLIENT_ID = '1212225360679145565'
+  const PORT = 57491
+  const REDIRECT_URI = `http://127.0.0.1:${PORT}/callback`
+
+  const callbackHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Discord Connected</title>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0f0f0f;color:#f0f0f0}
+.card{text-align:center;padding:40px 48px;background:#1a1a1a;border:1px solid #2e2e2e;border-radius:16px;max-width:360px}
+h2{color:#8b5cf6;margin-bottom:12px;font-size:20px}p{color:#888;font-size:14px;line-height:1.6}</style></head>
+<body><div class="card"><h2>&#10003; Connected to Discord</h2><p>You can close this tab and return to Pulsar.</p></div>
+<script>
+(function(){var p=new URLSearchParams(location.hash.slice(1));var t=p.get('access_token'),ty=p.get('token_type')||'Bearer';
+if(t){fetch('/token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({access_token:t,token_type:ty})});}
+else{document.querySelector('h2').textContent='Authentication failed';document.querySelector('p').textContent='No token received. Please try again.';}
+})();
+</script></body></html>`
+
+  return new Promise<{ access_token: string; token_type: string }>((resolve, reject) => {
+    let settled = false
+    const settle = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      fn()
+      server.close()
+    }
+
+    const server = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url?.startsWith('/callback')) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+        res.end(callbackHtml)
+      } else if (req.method === 'POST' && req.url === '/token') {
+        let body = ''
+        req.on('data', (chunk) => { body += chunk })
+        req.on('end', () => {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end('{}')
+          try {
+            const { access_token, token_type } = JSON.parse(body) as { access_token?: string; token_type?: string }
+            if (access_token) settle(() => resolve({ access_token, token_type: token_type || 'Bearer' }))
+            else settle(() => reject(new Error('No access token in response')))
+          } catch {
+            settle(() => reject(new Error('Invalid token response')))
+          }
+        })
+      } else {
+        res.writeHead(404)
+        res.end()
+      }
+    })
+
+    server.listen(PORT, '127.0.0.1', () => {
+      const authUrl =
+        `https://discord.com/api/oauth2/authorize` +
+        `?client_id=${CLIENT_ID}` +
+        `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+        `&response_type=token` +
+        `&scope=identify%20guilds`
+      shell.openExternal(authUrl)
+    })
+
+    server.on('error', (err) => settle(() => reject(err)))
+    setTimeout(() => settle(() => reject(new Error('Authentication timed out'))), 300_000)
+  })
+})
+
+ipcMain.handle('list-audio-files', async (_e, dir: string) => {
+  const AUDIO_EXTS = new Set(['.mp3', '.m4a', '.flac', '.wav', '.ogg', '.opus', '.aac', '.wma', '.webm', '.mp4'])
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+    return entries
+      .filter((e) => e.isFile() && AUDIO_EXTS.has(path.extname(e.name).toLowerCase()))
+      .map((e) => {
+        const fullPath = path.join(dir, e.name)
+        try {
+          const stat = fs.statSync(fullPath)
+          return { name: e.name, path: fullPath, size: stat.size }
+        } catch {
+          return { name: e.name, path: fullPath, size: 0 }
+        }
+      })
+  } catch {
+    return []
+  }
 })
 
 process.on('uncaughtException', (err) => {

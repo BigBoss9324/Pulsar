@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { AppStatus, AppSettings, HistoryItem } from '../types'
+import Button from './Button'
 import ConfirmDialog from './ConfirmDialog'
 import styles from './DevTab.module.css'
 
@@ -106,44 +107,60 @@ export default function DevTab({ version, status, showToast }: Props) {
         <div className={`card ${styles.panel}`}>
           <h3 className={styles.panelTitle}>Toast tester</h3>
           <div className={styles.buttonRow}>
-            <button className="btn btn-secondary btn-sm" onClick={() => showToast('Success toast fired', 'success')}>
+            <Button variant="secondary" size="sm" onClick={() => showToast('Success toast fired', 'success')}>
               Success
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => showToast('Error toast fired', 'error')}>
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => showToast('Error toast fired', 'error')}>
               Error
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => showToast('Info toast fired', '')}>
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => showToast('Info toast fired', '')}>
               Info
-            </button>
+            </Button>
           </div>
         </div>
 
         <div className={`card ${styles.panel}`}>
           <h3 className={styles.panelTitle}>Confirm dialog tester</h3>
           <div className={styles.buttonRow}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setConfirmOpen(true)}>
+            <Button variant="secondary" size="sm" onClick={() => setConfirmOpen(true)}>
               Open confirm
-            </button>
+            </Button>
+          </div>
+        </div>
+
+        <div className={`card ${styles.panel}`}>
+          <h3 className={styles.panelTitle}>Notification tester</h3>
+          <div className={styles.buttonRow}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => window.api.showNotification({ title: 'Pulsar', body: 'Test notification fired' }).catch(() => {})}
+            >
+              Fire notification
+            </Button>
           </div>
         </div>
 
         <div className={`card ${styles.panel}`}>
           <h3 className={styles.panelTitle}>Quick actions</h3>
           <div className={styles.buttonRow}>
-            <button
-              className="btn btn-secondary btn-sm"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => window.api.openAppDataFolder().catch(() => {})}
             >
               App data
-            </button>
-            <button
-              className="btn btn-secondary btn-sm"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => window.api.cancelDownload().catch(() => {})}
             >
               Cancel DL
-            </button>
-            <button
-              className="btn btn-danger btn-sm"
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
               onClick={() =>
                 window.api.clearHistory().then(() => {
                   setHistoryStats({ count: 0, totalBytes: 0, latest: null })
@@ -152,16 +169,17 @@ export default function DevTab({ version, status, showToast }: Props) {
               }
             >
               Clear history
-            </button>
+            </Button>
           </div>
           <div className={styles.actionDivider} />
           <div className={styles.buttonRow}>
-            <button
-              className="btn btn-danger btn-sm"
+            <Button
+              variant="danger"
+              size="sm"
               onClick={() => window.api.wipeAndUninstall().catch(() => {})}
             >
               Wipe data &amp; uninstall
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -195,7 +213,7 @@ export default function DevTab({ version, status, showToast }: Props) {
         <div className={`card ${styles.panel} ${styles.widePanel}`}>
           <div className={styles.panelHeader}>
             <h3 className={styles.panelTitle}>Queue</h3>
-            <button className="btn btn-ghost btn-sm" onClick={refreshQueue}>Refresh</button>
+            <Button variant="ghost" size="sm" onClick={refreshQueue}>Refresh</Button>
           </div>
           {queueState == null ? (
             <span className="muted">Loading…</span>
@@ -209,7 +227,7 @@ export default function DevTab({ version, status, showToast }: Props) {
         <div className={`card ${styles.panel} ${styles.fullSpan}`}>
           <div className={styles.panelHeader}>
             <h3 className={styles.panelTitle}>Log</h3>
-            <button className="btn btn-ghost btn-sm" onClick={refreshLog}>Refresh</button>
+            <Button variant="ghost" size="sm" onClick={refreshLog}>Refresh</Button>
           </div>
           {logContent == null ? (
             <span className="muted">Loading…</span>
@@ -226,7 +244,7 @@ export default function DevTab({ version, status, showToast }: Props) {
           title="Test confirmation"
           body="This is the reusable ConfirmDialog component. Confirming will just close it."
           confirmLabel="Confirm"
-          confirmVariant="btn-primary"
+          confirmVariant="primary"
           onConfirm={() => { setConfirmOpen(false); showToast('Confirmed!', 'success') }}
           onCancel={() => setConfirmOpen(false)}
         />

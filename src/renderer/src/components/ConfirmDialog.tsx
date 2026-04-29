@@ -1,10 +1,11 @@
+import Button, { type ButtonVariant } from './Button'
 import styles from './ConfirmDialog.module.css'
 
 interface Props {
   title: string
   body: string
   confirmLabel?: string
-  confirmVariant?: string
+  confirmVariant?: ButtonVariant
   onConfirm: () => void
   onCancel: () => void
 }
@@ -13,7 +14,7 @@ export default function ConfirmDialog({
   title,
   body,
   confirmLabel = 'Confirm',
-  confirmVariant = 'btn-danger',
+  confirmVariant = 'danger',
   onConfirm,
   onCancel,
 }: Props) {
@@ -23,12 +24,12 @@ export default function ConfirmDialog({
         <div className={styles.title}>{title}</div>
         <div className={styles.body}>{body}</div>
         <div className={styles.actions}>
-          <button className="btn btn-secondary" onClick={onCancel}>
+          <Button variant="secondary" onClick={onCancel}>
             Cancel
-          </button>
-          <button className={`btn ${confirmVariant}`} onClick={onConfirm}>
+          </Button>
+          <Button variant={confirmVariant} onClick={onConfirm}>
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

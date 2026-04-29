@@ -125,6 +125,11 @@ export interface AppSettings {
   embedMetadata: boolean
   embedThumbnail: boolean
   useDownloadArchive: boolean
+  ytdlpRequestDelaySeconds: number
+  ytdlpSleepIntervalMin: number
+  ytdlpSleepIntervalMax: number
+  maxConcurrentDownloads: number
+  youtubeCookiesFrom: 'none' | 'chrome' | 'firefox' | 'edge' | 'brave' | 'opera' | 'vivaldi' | 'chromium'
   autoCheckUpdates: boolean
   autoOpenFolder: boolean
   allowPrerelease: boolean

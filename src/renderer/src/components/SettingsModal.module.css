@@ -304,19 +304,6 @@
   align-items: center;
 }
 
-.releaseNotesToggle {
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 12px;
-  padding: 0;
-  cursor: pointer;
-}
-
-.releaseNotesToggle:hover {
-  color: var(--text);
-}
-
 .releaseNotes {
   overflow-wrap: anywhere;
   font-size: 12px;

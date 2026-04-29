@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AppSettings, GithubRelease } from '../types'
+import Button from './Button'
 import PathField from './PathField'
 import ToggleSetting from './ToggleSetting'
 import styles from './SettingsModal.module.css'
@@ -23,6 +24,17 @@ const DUPLICATE_OPTIONS = [
   { id: 'skip', label: 'Skip previously downloaded items' },
   { id: 'allow', label: 'Allow re-adding duplicates' },
   { id: 'overwrite', label: 'Overwrite existing files when redownloading' },
+]
+
+const YOUTUBE_COOKIES_OPTIONS = [
+  { id: 'none', label: 'Disabled' },
+  { id: 'chrome', label: 'Chrome' },
+  { id: 'firefox', label: 'Firefox' },
+  { id: 'edge', label: 'Microsoft Edge' },
+  { id: 'brave', label: 'Brave' },
+  { id: 'opera', label: 'Opera' },
+  { id: 'vivaldi', label: 'Vivaldi' },
+  { id: 'chromium', label: 'Chromium' },
 ]
 
 const ON_ERROR_OPTIONS = [
@@ -59,13 +71,14 @@ function SettingLabel({ text, help }: { text: string; help?: string }) {
 function InfoHint({ text }: { text: string }) {
   return (
     <span className={styles.infoHint}>
-      <button
+      <Button
+        variant="unstyled"
         className={styles.infoButton}
         type="button"
         aria-label={text}
       >
         i
-      </button>
+      </Button>
       <span className={styles.infoTooltip} role="tooltip">{text}</span>
     </span>
   )
@@ -197,12 +210,12 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
             actions={
               <>
                 {draft.defaultOutputDir && (
-                  <button className="btn btn-ghost" type="button" onClick={() => window.api.openFolder(draft.defaultOutputDir)}>
+                  <Button variant="ghost" type="button" onClick={() => window.api.openFolder(draft.defaultOutputDir)}>
                     Open
-                  </button>
+                  </Button>
                 )}
-                <button
-                  className="btn btn-secondary"
+                <Button
+                  variant="secondary"
                   type="button"
                   onClick={async () => {
                     const dir = await window.api.chooseDirectory()
@@ -210,7 +223,7 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
                   }}
                 >
                   Browse
-                </button>
+                </Button>
               </>
             }
           />
@@ -308,13 +321,14 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
                   {archiveCount === null ? 'Loading…' : `${archiveCount} ${archiveCount === 1 ? 'entry' : 'entries'} in archive`}
                 </span>
                 {(archiveCount ?? 0) > 0 && (
-                  <button
-                    className="btn btn-ghost btn-sm"
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     disabled={clearingArchive}
                     onClick={() => void handleClearArchive()}
                   >
                     {clearingArchive ? 'Clearing…' : 'Clear archive'}
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
@@ -446,26 +460,26 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
           </div>
 
           <div className={styles.actionGrid}>
-            <button className="btn btn-secondary" type="button" onClick={() => onCopyVersion()}>
+            <Button variant="secondary" type="button" onClick={() => onCopyVersion()}>
               Copy version
-            </button>
-            <button className="btn btn-secondary" type="button" onClick={() => void onCheckForUpdates()}>
+            </Button>
+            <Button variant="secondary" type="button" onClick={() => void onCheckForUpdates()}>
               Check for updates
-            </button>
-            <button
-              className="btn btn-secondary"
+            </Button>
+            <Button
+              variant="secondary"
               type="button"
               onClick={() => window.api.openExternalUrl('https://github.com/BigBoss9324/Pulsar/releases').catch(() => {})}
             >
               View releases
-            </button>
-            <button
-              className="btn btn-secondary"
+            </Button>
+            <Button
+              variant="secondary"
               type="button"
               onClick={() => window.api.openAppDataFolder().catch(() => {})}
             >
               Open app data
-            </button>
+            </Button>
           </div>
 
           <span className="muted" style={{ fontSize: 12 }}>
@@ -479,8 +493,94 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
           <div className={styles.sectionHeader}>
             <div>
               <div className={styles.sectionTitle}>Downloader</div>
-              <div className={styles.sectionSubtitle}>yt-dlp version and updates</div>
+              <div className={styles.sectionSubtitle}>yt-dlp authentication, pacing, and updates</div>
             </div>
+          </div>
+
+          <div className="flex-col gap-1">
+            <SettingLabel text="YouTube login" help="Read cookies from a browser you are signed into YouTube with. This bypasses bot detection and allows downloading age-restricted or member-only content. The browser does not need to be open." />
+            <select
+              className="select"
+              value={draft.youtubeCookiesFrom}
+              onChange={(e) => setDraft((prev) => ({ ...prev, youtubeCookiesFrom: e.target.value as AppSettings['youtubeCookiesFrom'] }))}
+            >
+              {YOUTUBE_COOKIES_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </select>
+            {draft.youtubeCookiesFrom !== 'none' && (
+              <span className="muted" style={{ fontSize: 12 }}>
+                Pulsar will pass your {YOUTUBE_COOKIES_OPTIONS.find((o) => o.id === draft.youtubeCookiesFrom)?.label} cookies to yt-dlp. Make sure you are signed into YouTube in that browser.
+              </span>
+            )}
+          </div>
+
+          <div className="flex-col gap-1">
+            <SettingLabel text="Concurrent downloads" help="How many downloads run at the same time. Higher values are faster but increase the chance of hitting rate limits." />
+            <select
+              className="select"
+              value={draft.maxConcurrentDownloads ?? 1}
+              onChange={(e) => setDraft((prev) => ({ ...prev, maxConcurrentDownloads: Number(e.target.value) }))}
+            >
+              {[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>{n === 1 ? '1 (default)' : n}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex-col gap-1">
+            <SettingLabel text="Download interval" help="Waits a random amount of time before starting each download. Helps avoid YouTube bot detection when downloading many videos back to back. Recommended: 8–15 seconds." />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                max={120}
+                step={1}
+                placeholder="Min"
+                value={draft.ytdlpSleepIntervalMin}
+                onChange={(e) => setDraft((prev) => {
+                  const min = Math.max(0, Number(e.target.value) || 0)
+                  return { ...prev, ytdlpSleepIntervalMin: min, ytdlpSleepIntervalMax: Math.max(min, prev.ytdlpSleepIntervalMax) }
+                })}
+              />
+              <span className="muted" style={{ fontSize: 12, flexShrink: 0 }}>to</span>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                max={120}
+                step={1}
+                placeholder="Max"
+                value={draft.ytdlpSleepIntervalMax}
+                onChange={(e) => setDraft((prev) => {
+                  const max = Math.max(0, Number(e.target.value) || 0)
+                  return { ...prev, ytdlpSleepIntervalMax: max, ytdlpSleepIntervalMin: Math.min(prev.ytdlpSleepIntervalMin, max) }
+                })}
+              />
+            </div>
+            <span className="muted" style={{ fontSize: 12 }}>
+              Seconds. Set min to 0 to disable. yt-dlp picks a random delay in the range for each download.
+            </span>
+          </div>
+
+          <div className="flex-col gap-1">
+            <SettingLabel text="Request pacing" help="Adds a short delay between yt-dlp metadata requests. This can reduce false positives from rapid repeated requests." />
+            <input
+              className="input"
+              type="number"
+              min={0}
+              max={10}
+              step={0.5}
+              value={draft.ytdlpRequestDelaySeconds}
+              onChange={(e) => setDraft((prev) => ({
+                ...prev,
+                ytdlpRequestDelaySeconds: Math.max(0, Math.min(10, Number(e.target.value) || 0)),
+              }))}
+            />
+            <span className="muted" style={{ fontSize: 12 }}>
+              Seconds between requests. Use 0 to disable pacing.
+            </span>
           </div>
 
           <div className={styles.ytdlpRow}>
@@ -498,21 +598,23 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
             </div>
             <div className="flex gap-2">
               {ytdlpLatest && ytdlpLatest > (ytdlpCurrent ?? '') && (
-                <button
-                  className="btn btn-primary btn-sm"
+                <Button
+                  variant="primary"
+                  size="sm"
                   disabled={ytdlpUpdating}
                   onClick={() => void handleUpdateYtdlp()}
                 >
                   {ytdlpUpdating ? 'Updating…' : `Update to ${ytdlpLatest}`}
-                </button>
+                </Button>
               )}
-              <button
-                className="btn btn-secondary btn-sm"
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={ytdlpChecking || ytdlpUpdating}
                 onClick={() => void handleCheckYtdlpUpdate()}
               >
                 {ytdlpChecking ? 'Checking…' : 'Check for update'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -525,13 +627,14 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
               <div className={styles.sectionTitle}>Version</div>
               <div className={styles.sectionSubtitle}>Manage installed versions and review release notes</div>
             </div>
-            <button
-              className="btn btn-ghost btn-sm"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={loadReleases}
               disabled={releasesLoading}
             >
               {releases == null ? 'Browse versions' : releasesLoading ? 'Loading…' : 'Refresh'}
-            </button>
+            </Button>
           </div>
 
           <div className={styles.versionSummary}>
@@ -603,13 +706,14 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
                           </span>
                         </div>
                         <div className={styles.releaseCta}>
-                          <button
-                            className={`btn ${isCurrent ? 'btn-ghost' : 'btn-secondary'} btn-sm`}
+                          <Button
+                            variant={isCurrent ? 'ghost' : 'secondary'}
+                            size="sm"
                             disabled={!asset || isInstalling || isCurrent}
                             onClick={() => handleInstall(release)}
                           >
                             {isInstalling ? 'Downloading…' : isCurrent ? 'Installed' : asset ? 'Install' : 'No installer'}
-                          </button>
+                          </Button>
                         </div>
                       </div>
 
@@ -618,13 +722,13 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
                           {release.name && release.name !== release.tag_name ? release.name : normalizeTag(release.tag_name)}
                         </div>
                         {hasNotes && (
-                          <button
+                          <Button
+                            variant="mutedLink"
                             type="button"
-                            className={styles.releaseNotesToggle}
                             onClick={() => toggleReleaseNotes(release.tag_name)}
                           >
                             {isExpanded ? 'Hide notes' : 'Show notes'}
-                          </button>
+                          </Button>
                         )}
                       </div>
 
@@ -658,10 +762,10 @@ export default function SettingsModal({ settings, version, displayVersion, onChe
         </div>
 
         <div className={styles.footer}>
-          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={handleSave} disabled={saving}>
             {saving ? 'Saving...' : 'Save settings'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -94,21 +94,6 @@
   white-space: nowrap;
 }
 
-.tab {
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  padding: 8px 14px 10px;
-  transition: color 0.15s, border-color 0.15s;
-  margin-bottom: -1px;
-}
-.tab:hover { color: var(--text); }
-.tabActive { color: var(--text) !important; border-bottom-color: var(--accent) !important; }
-
 .badge {
   font-size: 11px;
   font-weight: 500;
@@ -171,20 +156,6 @@
 
 .footerDivider {
   color: var(--text-faint);
-}
-
-.footerLink {
-  border: none;
-  background: none;
-  padding: 0;
-  color: var(--accent);
-  font: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.footerLink:hover {
-  text-decoration: underline;
 }
 
 .toast {

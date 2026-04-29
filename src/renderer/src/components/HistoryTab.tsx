@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { HistoryItem } from '../types'
+import Button from './Button'
 import Thumb from './Thumb'
 import ConfirmDialog from './ConfirmDialog'
 import { revealDownloadLocation, openDownloadFolder } from '../utils/downloadLocation'
@@ -110,22 +111,23 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
       <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
         <span style={{ fontWeight: 600, fontSize: 13 }}>{items.length} download{items.length !== 1 ? 's' : ''}</span>
         {selected.size > 0 && (
-          <button
-            className="btn btn-secondary btn-sm"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => { onRedownload(selectedItems); setSelected(new Set()) }}
           >
             <QueueIcon />
             Add {selected.size} to queue
-          </button>
+          </Button>
         )}
         {defaultOutputDir && (
-          <button className="btn btn-ghost btn-sm" onClick={() => void openDownloadFolder({ outputDir: defaultOutputDir })}>
+          <Button variant="ghost" size="sm" onClick={() => void openDownloadFolder({ outputDir: defaultOutputDir })}>
             Open default folder
-          </button>
+          </Button>
         )}
-        <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setConfirmClearOpen(true)}>
+        <Button variant="danger" size="sm" style={{ marginLeft: 'auto' }} onClick={() => setConfirmClearOpen(true)}>
           Clear all
-        </button>
+        </Button>
       </div>
 
       <div className={styles.toolbar}>
@@ -177,26 +179,27 @@ export default function HistoryTab({ showToast, onRedownload, defaultOutputDir }
                 </div>
               </div>
               <div className={styles.actions}>
-                <button className="btn btn-secondary btn-sm" title="Add to queue again" onClick={() => onRedownload([item])}>
+                <Button variant="secondary" size="sm" title="Add to queue again" onClick={() => onRedownload([item])}>
                   <QueueIcon />
                   Redownload
-                </button>
-                <button className="btn btn-ghost btn-sm" title="Open folder" onClick={() => void openDownloadFolder(item)}>
+                </Button>
+                <Button variant="ghost" size="sm" title="Open folder" onClick={() => void openDownloadFolder(item)}>
                   <FolderIcon />
                   Open
-                </button>
-                <button
-                  className="btn btn-ghost btn-sm"
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   title={item.outputPath ? 'Show file' : 'Open folder'}
                   onClick={() => void revealDownloadLocation(item, showToast)}
                 >
                   <FileIcon />
                   Reveal
-                </button>
-                <button className="btn btn-ghost btn-sm" title="Remove from history" onClick={() => handleDelete(item.id)}>
+                </Button>
+                <Button variant="ghost" size="sm" title="Remove from history" onClick={() => handleDelete(item.id)}>
                   <TrashIcon />
                   Remove
-                </button>
+                </Button>
               </div>
             </div>
           )
